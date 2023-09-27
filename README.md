@@ -10,9 +10,12 @@ nimble install -dy
 cd shadow
 # the default shadow.yml will start 5k nodes, you might want to change that by removing
 # lines and setting PEERS to the number of instances
-./run.sh
-# the output is a "latencies" file, or you can find each host output in the
-# data.shadow folder
+./run.sh <runs> <nodes>
+# the first parameter <runs> tells the number of simulation runs, and second parameter <nodes> tells the 
+# number of nodes in simulation, for example ./run.sh 2 3000
+# the output for each run creates latencies(X) and shadowlogX files. where X is the simulation number.
+
+# the run script (run.sh) uses awk to summarize latencies(X) and shadowlogX files
 
 # you can use the plotter tool to extract useful metrics & generate a graph
 cd ../tools
