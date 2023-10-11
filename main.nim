@@ -131,6 +131,7 @@ proc main {.async.} =
     while true:
       try:
         addrs = resolveTAddress(tAddress).mapIt(MultiAddress.init(it).tryGet())
+        echo tAddress, " resolved: ", addrs
         break  # Break out of the loop on successful resolution
       except CatchableError as exc:
         echo "Failed to resolve address:", exc.msg
@@ -138,9 +139,11 @@ proc main {.async.} =
 
     while true:
       try:
+        echo "Trying to connect to ", addrs[0]
         let peerId = await switch.connect(addrs[0], allowUnknownPeerId=true).wait(5.seconds)
         #asyncSpawn pinger(peerId)
         connected.inc()
+        echo "Connected!"
         break
       except CatchableError as exc:
         echo "Failed to dial", exc.msg
