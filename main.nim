@@ -14,7 +14,7 @@ proc msgIdProvider(m: Message): Result[MessageId, ValidationResult] =
 proc main {.async.} =
   let
     hostname = getHostname()
-    myId = parseInt(hostname[4..^1])
+    myId = parseInt(hostname[5..^1])
     #publisherCount = client.param(int, "publisher_count")
     publisherCount = 10
     isPublisher = myId <= publisherCount
@@ -23,6 +23,7 @@ proc main {.async.} =
     rng = libp2p.newRng()
     #randCountry = rng.rand(distribCumSummed[^1])
     #country = distribCumSummed.find(distribCumSummed.filterIt(it >= randCountry)[0])
+  echo "Hostname: ", hostname
   let
     address = initTAddress("0.0.0.0:5000")
     switch =
@@ -102,7 +103,7 @@ proc main {.async.} =
   echo "Listening on ", switch.peerInfo.addrs
   echo myId, ", ", isPublisher, ", ", switch.peerInfo.peerId
 
-  var peersInfo = toSeq(1..parseInt(getEnv("PEERS")))
+  var peersInfo = toSeq(0..<parseInt(getEnv("PEERS")))
   rng.shuffle(peersInfo)
 
   proc pinger(peerId: PeerId) {.async.} =
@@ -122,15 +123,28 @@ proc main {.async.} =
   var connected = 0
   for peerInfo in peersInfo:
     if connected >= connectTo: break
-    let tAddress = "peer" & $peerInfo & ":5000"
+    let tAddress = "peer-" & $peerInfo & ":5000"
     echo tAddress
-    let addrs = resolveTAddress(tAddress).mapIt(MultiAddress.init(it).tryGet())
-    try:
-      let peerId = await switch.connect(addrs[0], allowUnknownPeerId=true).wait(5.seconds)
-      #asyncSpawn pinger(peerId)
-      connected.inc()
-    except CatchableError as exc:
-      echo "Failed to dial", exc.msg
+
+    var addrs: seq[MultiAddress]
+    echo "Trying to resolve ", tAddress
+    while true:
+      try:
+        addrs = resolveTAddress(tAddress).mapIt(MultiAddress.init(it).tryGet())
+        break  # Break out of the loop on successful resolution
+      except CatchableError as exc:
+        echo "Failed to resolve address:", exc.msg
+        await sleepAsync(250)
+
+    while true:
+      try:
+        let peerId = await switch.connect(addrs[0], allowUnknownPeerId=true).wait(5.seconds)
+        #asyncSpawn pinger(peerId)
+        connected.inc()
+        break
+      except CatchableError as exc:
+        echo "Failed to dial", exc.msg
+        await sleepAsync(250)
 
   #let
   #  maxMessageDelay = client.param(int, "max_message_delay")
@@ -140,7 +154,7 @@ proc main {.async.} =
   await sleepAsync(10.seconds)
   echo "Mesh size: ", gossipSub.mesh.getOrDefault("test").len
 
-  for msg in 0 ..< 10:#client.param(int, "message_count"):
+  for msg in 0 ..< 100:#client.param(int, "message_count"):
     await sleepAsync(12.seconds)
     if msg mod publisherCount == myId - 1:
     #if myId == 1:
