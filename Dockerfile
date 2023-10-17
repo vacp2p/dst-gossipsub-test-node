@@ -7,7 +7,7 @@ COPY . .
 
 
 RUN apt-get update
-RUN apt-get install -y netcat
+RUN apt-get install -y netcat iputils-ping
 
 RUN git config --global http.sslVerify false
 
