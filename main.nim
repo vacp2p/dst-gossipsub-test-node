@@ -14,7 +14,7 @@ proc msgIdProvider(m: Message): Result[MessageId, ValidationResult] =
 proc main {.async.} =
   let
     hostname = getHostname()
-    myId = parseInt(hostname[5..^1])
+    myId = parseInt(hostname[4..^1])
     #publisherCount = client.param(int, "publisher_count")
     publisherCount = 10
     isPublisher = myId <= publisherCount
