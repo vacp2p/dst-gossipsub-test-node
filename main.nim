@@ -14,7 +14,7 @@ proc msgIdProvider(m: Message): Result[MessageId, ValidationResult] =
 proc main {.async.} =
   let
     hostname = getHostname()
-    myId = parseInt(hostname[4..^1])
+    myId = parseInt(getEnv("PEERNUMBER"))
     #publisherCount = client.param(int, "publisher_count")
     publisherCount = 10
     isPublisher = myId <= publisherCount
@@ -25,7 +25,9 @@ proc main {.async.} =
     #country = distribCumSummed.find(distribCumSummed.filterIt(it >= randCountry)[0])
   echo "Hostname: ", hostname
   let
-    address = initTAddress("0.0.0.0:5000")
+    myport = 5000 + parseInt(getEnv("PEERNUMBER"))
+    myaddress = "0.0.0.0:" & $myport
+    address = initTAddress(myaddress)
     switch =
       SwitchBuilder
         .new()
