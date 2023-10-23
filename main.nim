@@ -104,6 +104,7 @@ proc main {.async.} =
   echo myId, ", ", isPublisher, ", ", switch.peerInfo.peerId
 
   var peersInfo = toSeq(0..<parseInt(getEnv("PEERS")))
+  var peerPerPod = parseInt(getEnv("PEERSPERPOD"))
   rng.shuffle(peersInfo)
 
   proc pinger(peerId: PeerId) {.async.} =
@@ -123,7 +124,9 @@ proc main {.async.} =
   var connected = 0
   for peerInfo in peersInfo:
     if connected >= connectTo: break
-    let tAddress = "peer-" & $peerInfo & ":5000"
+    let number = peerInfo div peerPerPod
+    let port = 5000 + (peerInfo mod peerPerPod)
+    let tAddress = "pod-" & $number & ":" & $port
     echo tAddress
 
     var addrs: seq[MultiAddress]
