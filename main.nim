@@ -125,9 +125,10 @@ proc main {.async.} =
   for peerInfo in peersInfo:
     if connected >= connectTo: break
     let number = peerInfo div peerPerPod
-    let port = 5000 + (peerInfo mod peerPerPod)
+    let port = 5000 + (peerInfo mod peerPerPod) - 1
     let tAddress = "pod-" & $number & ":" & $port
-    echo tAddress
+    echo "Will connect to peer " , peerInfo
+    echo "Service : ", tAddress
 
     var addrs: seq[MultiAddress]
     echo "Trying to resolve ", tAddress
