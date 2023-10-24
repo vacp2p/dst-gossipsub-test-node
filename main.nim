@@ -141,7 +141,8 @@ proc main {.async.} =
         break  # Break out of the loop on successful resolution
       except CatchableError as exc:
         echo "Failed to resolve address:", exc.msg
-        await sleepAsync(250)
+        echo "Waiting 15 seconds..."
+        await sleepAsync(15.seconds)
 
     while true:
       try:
@@ -153,14 +154,16 @@ proc main {.async.} =
         break
       except CatchableError as exc:
         echo "Failed to dial", exc.msg
-        await sleepAsync(250)
+        echo "Waiting 15 seconds..."
+        await sleepAsync(15.seconds)
 
   #let
   #  maxMessageDelay = client.param(int, "max_message_delay")
   #  warmupMessages = client.param(int, "warmup_messages")
   #startOfTest = Moment.now() + milliseconds(warmupMessages * maxMessageDelay div 2)
 
-  await sleepAsync(10.seconds)
+  echo "Waiting 60 seconds until network is deployed..."
+  await sleepAsync(60.seconds)
   echo "Mesh size: ", gossipSub.mesh.getOrDefault("test").len
 
   for msg in 0 ..< 100:#client.param(int, "message_count"):
