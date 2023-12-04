@@ -16,7 +16,7 @@ proc main {.async.} =
     hostname = getHostname()
     myId = parseInt(getEnv("PEERNUMBER"))
     #publisherCount = client.param(int, "publisher_count")
-    publisherCount = 10
+    publisherCount = parseInt(getEnv("PEERS"))
     isPublisher = myId <= publisherCount
     #isAttacker = (not isPublisher) and myId - publisherCount <= client.param(int, "attacker_count")
     isAttacker = false
@@ -35,7 +35,7 @@ proc main {.async.} =
         .withRng(rng)
         #.withYamux()
         .withMplex()
-        .withMaxConnections(10000)
+        .withMaxConnections(250)
         .withTcpTransport(flags = {ServerFlags.TcpNoDelay})
         #.withPlainText()
         .withNoise()
@@ -48,16 +48,16 @@ proc main {.async.} =
       anonymize = true,
       )
     pingProtocol = Ping.new(rng=rng)
-  gossipSub.parameters.floodPublish = false
+gossipSub.parameters.floodPublish = true
   #gossipSub.parameters.lazyPushThreshold = 1_000_000_000
   #gossipSub.parameters.lazyPushThreshold = 0
   gossipSub.parameters.opportunisticGraftThreshold = -10000
   gossipSub.parameters.heartbeatInterval = 700.milliseconds
   gossipSub.parameters.pruneBackoff = 3.seconds
   gossipSub.parameters.gossipFactor = 0.05
-  gossipSub.parameters.d = 8
-  gossipSub.parameters.dLow = 6
-  gossipSub.parameters.dHigh = 12
+  gossipSub.parameters.d = 6
+  gossipSub.parameters.dLow = 4
+  gossipSub.parameters.dHigh = 8
   gossipSub.parameters.dScore = 6
   gossipSub.parameters.dOut = 6 div 2
   gossipSub.parameters.dLazy = 6
@@ -104,6 +104,8 @@ proc main {.async.} =
 
   echo "Listening on ", switch.peerInfo.addrs
   echo myId, ", ", isPublisher, ", ", switch.peerInfo.peerId
+  echo "Waiting 60 seconds for node building..."
+  await sleepAsync(60.seconds)
 
   var peersInfo = toSeq(0..<parseInt(getEnv("PEERS")))
   var peerPerPod = parseInt(getEnv("PEERSPERPOD"))
@@ -162,23 +164,19 @@ proc main {.async.} =
   #  warmupMessages = client.param(int, "warmup_messages")
   #startOfTest = Moment.now() + milliseconds(warmupMessages * maxMessageDelay div 2)
 
-  echo "Waiting 60 seconds until network is deployed..."
-  await sleepAsync(60.seconds)
   echo "Mesh size: ", gossipSub.mesh.getOrDefault("test").len
 
-  for msg in 0 ..< 100:#client.param(int, "message_count"):
-    await sleepAsync(12.seconds)
-    if msg mod publisherCount == myId - 1:
-    #if myId == 1:
+  let turnToPublish = parseInt(getHostname()[4..^1])
+  echo "Publishing turn is: ", turnToPublish
+  for msg in 0 ..< 10000:#client.param(int, "message_count"):
+    await sleepAsync(1.seconds)
+    if msg mod publisherCount == turnToPublish:
+      echo "Sending message at: " ,times.getTime()
       let
         now = getTime()
         nowInt = seconds(now.toUnix()) + nanoseconds(times.nanosecond(now))
-      #var nowBytes = @(toBytesLE(uint64(nowInt.nanoseconds))) & newSeq[byte](500_000 div chunks)
-      var nowBytes = @(toBytesLE(uint64(nowInt.nanoseconds))) & newSeq[byte](50)
-      #echo "sending ", uint64(nowInt.nanoseconds)
-      for chunk in 0..<chunks:
-        nowBytes[10] = byte(chunk)
-        doAssert((await gossipSub.publish("test", nowBytes)) > 0)
+      var nowBytes = @(toBytesLE(uint64(nowInt.nanoseconds))) & newSeq[byte](10000)
+      doAssert((await gossipSub.publish("test", nowBytes)) > 0)
 
   #echo "BW: ", libp2p_protocols_bytes.value(labelValues=["/meshsub/1.1.0", "in"]) + libp2p_protocols_bytes.value(labelValues=["/meshsub/1.1.0", "out"])
   #echo "DUPS: ", libp2p_gossipsub_duplicate.value(), " / ", libp2p_gossipsub_received.value()

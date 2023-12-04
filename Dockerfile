@@ -13,10 +13,18 @@ RUN nimble c -d:chronicles_colors=None --threads:on -d:metrics -d:libp2p_network
 
 
 FROM nimlang/nim
+
+RUN apt-get update && apt-get install cron -y
+
 WORKDIR /node
 
 COPY --from=build /node/main /node/main
 
+COPY cron_runner.sh .
+
+RUN chmod +x cron_runner.sh
+RUN chmod +x main
+
 EXPOSE 5000
 
-ENTRYPOINT ["./main"]
+ENTRYPOINT ["./cron_runner.sh"]
