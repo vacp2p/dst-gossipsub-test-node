@@ -48,7 +48,7 @@ proc main {.async.} =
       anonymize = true,
       )
     pingProtocol = Ping.new(rng=rng)
-gossipSub.parameters.floodPublish = true
+  gossipSub.parameters.floodPublish = true
   #gossipSub.parameters.lazyPushThreshold = 1_000_000_000
   #gossipSub.parameters.lazyPushThreshold = 0
   gossipSub.parameters.opportunisticGraftThreshold = -10000
