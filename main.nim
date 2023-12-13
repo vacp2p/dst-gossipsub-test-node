@@ -15,6 +15,9 @@ proc main {.async.} =
   let
     hostname = getHostname()
     myId = parseInt(getEnv("PEERNUMBER"))
+    msg_rate = parseInt(getEnv("MSGRATE"))
+    msg_size = parseInt(getEnv("MSGSIZE"))
+
     #publisherCount = client.param(int, "publisher_count")
     publisherCount = parseInt(getEnv("PEERS"))
     isPublisher = myId <= publisherCount
@@ -169,13 +172,13 @@ proc main {.async.} =
   let turnToPublish = parseInt(getHostname()[4..^1])
   echo "Publishing turn is: ", turnToPublish
   for msg in 0 ..< 10000:#client.param(int, "message_count"):
-    await sleepAsync(1.seconds)
+    await sleepAsync(msg_rate)
     if msg mod publisherCount == turnToPublish:
       echo "Sending message at: " ,times.getTime()
       let
         now = getTime()
         nowInt = seconds(now.toUnix()) + nanoseconds(times.nanosecond(now))
-      var nowBytes = @(toBytesLE(uint64(nowInt.nanoseconds))) & newSeq[byte](10000)
+      var nowBytes = @(toBytesLE(uint64(nowInt.nanoseconds))) & newSeq[byte](msg_size)
       doAssert((await gossipSub.publish("test", nowBytes)) > 0)
 
   #echo "BW: ", libp2p_protocols_bytes.value(labelValues=["/meshsub/1.1.0", "in"]) + libp2p_protocols_bytes.value(labelValues=["/meshsub/1.1.0", "out"])
