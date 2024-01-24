@@ -1,5 +1,5 @@
 # Create the build image
-FROM nimlang/nim as build
+FROM nimlang/nim:1.6.18 as build
 
 # Copy the wls files to the production image
 WORKDIR /node
@@ -12,7 +12,7 @@ RUN nimble install -dy
 RUN nimble c -d:chronicles_colors=None --threads:on -d:metrics -d:libp2p_network_protocols_metrics  -d:release main
 
 
-FROM nimlang/nim
+FROM nimlang/nim:1.6.18
 
 RUN apt-get update && apt-get install cron -y
 
