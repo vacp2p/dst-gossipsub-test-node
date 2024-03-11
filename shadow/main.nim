@@ -1,16 +1,21 @@
 import stew/endians2, stew/byteutils, tables, strutils, os
-
-import ../../nim-libp2p/libp2p, ../../nim-libp2p/libp2p/protocols/pubsub/rpc/messages
-import ../../nim-libp2p/libp2p/muxers/mplex/lpchannel, ../../nim-libp2p/libp2p/protocols/ping
+import libp2p, libp2p/protocols/pubsub/rpc/messages
+import libp2p/muxers/mplex/lpchannel, libp2p/protocols/ping
+#import libp2p/protocols/pubsub/pubsubpeer
 
 import chronos
 import sequtils, hashes, math, metrics
 from times import getTime, toUnix, fromUnix, `-`, initTime, `$`, inMilliseconds
 from nativesockets import getHostname
 
-var msg_size = parseInt(getEnv("MSG_SIZE")) 
-var chunks = parseInt(getEnv("FRAGMENTS"))
-if chunks < 1 or chunks > 10:     #we experiment with upto 10 fragments
+#These parameters are passed from yaml file, and each defined peer may receive different parameters (e.g. message size)
+var
+  publisherCount = parseInt(getEnv("PUBLISHERS"))
+  msg_size = parseInt(getEnv("MSG_SIZE")) 
+  chunks = parseInt(getEnv("FRAGMENTS"))
+
+#we experiment with upto 10 fragments. 1 means, the messages are not fragmented
+if chunks < 1 or chunks > 10:     
   chunks = 1
 
 proc msgIdProvider(m: Message): Result[MessageId, ValidationResult] =
@@ -20,9 +25,7 @@ proc main {.async.} =
   let
     hostname = getHostname()
     myId = parseInt(hostname[4..^1])
-    #publisherCount = client.param(int, "publisher_count")
-    publisherCount = 15           #Every publisher sends one message
-    isPublisher = myId <= publisherCount
+    isPublisher = myId <= publisherCount      #need to adjust is publishers ldont start from peer1
     #isAttacker = (not isPublisher) and myId - publisherCount <= client.param(int, "attacker_count")
     isAttacker = false
     rng = libp2p.newRng()
@@ -155,10 +158,32 @@ proc main {.async.} =
   await sleepAsync(5.seconds)  
 
   # Actual message publishing, one message published every 3 seconds
-  let 
-    pubStart = 4
-    pubEnd = pubStart + publisherCount
-  for msg in pubStart .. pubEnd:#client.param(int, "message_count"):
+  # First 1-2 messages take longer than expected time due to low cwnd. 
+  # warmup_messages can set cwnd to a desired level. or alternatively, warmup messages can be set to 0
+  let
+    warmup_messages = 2 
+    #shadow.yaml defines peers with changing latency/bandwith. In the current arrangement all the publishers 
+    #will get different latency/bandwidth
+    pubStart = 4                                                       
+    pubEnd = pubStart + publisherCount + warmup_messages
+
+
+  #we send warmup_messages for adjusting TCP cwnd  
+  for i in pubStart..<(pubStart + warmup_messages):
+    await sleepAsync(2.seconds)
+    if i == myId:
+      #two warmup messages for cwnd raising
+      let
+          now = getTime()
+          nowInt = seconds(now.toUnix()) + nanoseconds(times.nanosecond(now))
+      var nowBytes = @(toBytesLE(uint64(nowInt.nanoseconds))) & newSeq[byte](msg_size)
+      doAssert((await gossipSub.publish("test", nowBytes)) > 0)
+  #done sending warmup_messages , wait for short time
+  await sleepAsync(5.seconds)
+
+
+  #We now send publisher_count messages
+  for msg in (pubStart + warmup_messages) .. pubEnd:#client.param(int, "message_count"):
     await sleepAsync(3.seconds)
     if msg mod (pubEnd+1) == myId:
       let
@@ -181,6 +206,6 @@ proc main {.async.} =
        "\tidontwant_saves ", libp2p_gossipsub_idontwant_saved_messages.value(),
        "\tdup_received ", libp2p_gossipsub_duplicate.value(),
        "\tUnique_msg_received ", libp2p_gossipsub_received.value(),
-       "\tStaggered_Saves ", libp2p_gossipsub_staggerSave.value(),
-       "\tDontWant_IN_Stagger ", libp2p_gossipsub_staggerDontWantSave.value()
+       "\tStaggered_Saves ", libp2p_gossipsub_staggerDontWantSave.value(),
+       "\tDontWant_IN_Stagger ", libp2p_gossipsub_staggerDontWantSave2.value()
 waitFor(main())
