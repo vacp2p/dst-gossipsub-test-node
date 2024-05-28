@@ -2,7 +2,7 @@ import stew/endians2, stew/byteutils, tables, strutils, os
 import libp2p, libp2p/protocols/pubsub/rpc/messages
 import libp2p/muxers/mplex/lpchannel, libp2p/protocols/ping
 import chronos
-import sequtils, hashes, math, metrics
+import sequtils, hashes, math, metrics, metrics/chronos_httpserver
 from times import getTime, toUnix, fromUnix, `-`, initTime, `$`, inMilliseconds
 from nativesockets import getHostname
 
@@ -10,6 +10,24 @@ const chunks = 1
 
 proc msgIdProvider(m: Message): Result[MessageId, ValidationResult] =
   return ok(($m.data.hash).toBytes())
+
+proc startMetricsServer(
+    serverIp: IpAddress, serverPort: Port
+): Result[MetricsHttpServerRef, string] =
+  info "Starting metrics HTTP server", serverIp = $serverIp, serverPort = $serverPort
+
+  let metricsServerRes = MetricsHttpServerRef.new($serverIp, serverPort)
+  if metricsServerRes.isErr():
+    return err("metrics HTTP server start failed: " & $metricsServerRes.error)
+
+  let server = metricsServerRes.value
+  try:
+    waitFor server.start()
+  except CatchableError:
+    return err("metrics HTTP server start failed: " & getCurrentExceptionMsg())
+
+  info "Metrics HTTP server started", serverIp = $serverIp, serverPort = $serverPort
+  ok(metricsServerRes.value)
 
 proc main {.async.} =
   let
@@ -51,6 +69,10 @@ proc main {.async.} =
       anonymize = true,
       )
     pingProtocol = Ping.new(rng=rng)
+  # Metrics
+  echo "Starting metrics HTTP server"
+  let metricsServer = startMetricsServer(parseIpAddress("0.0.0.0"), Port(8000))
+
   gossipSub.parameters.floodPublish = true
   #gossipSub.parameters.lazyPushThreshold = 1_000_000_000
   #gossipSub.parameters.lazyPushThreshold = 0
@@ -102,7 +124,6 @@ proc main {.async.} =
   switch.mount(gossipSub)
   switch.mount(pingProtocol)
   await switch.start()
-  #TODO
   #defer: await switch.stop()
 
   echo "Listening on ", switch.peerInfo.addrs
@@ -111,7 +132,7 @@ proc main {.async.} =
   await sleepAsync(60.seconds)
 
   var peersInfo = toSeq(0..<parseInt(getEnv("PEERS")))
-  var peerPerPod = parseInt(getEnv("PEERSPERPOD"))
+  # var peerPerPod = parseInt(getEnv("PEERSPERPOD"))
   rng.shuffle(peersInfo)
 
   proc pinger(peerId: PeerId) {.async.} =
@@ -131,9 +152,10 @@ proc main {.async.} =
   var connected = 0
   for peerInfo in peersInfo:
     if connected >= connectTo: break
-    let number = peerInfo div peerPerPod
-    let port = 5000 + (peerInfo mod peerPerPod)
-    let tAddress = "pod-" & $number & ":" & $port
+    # let number = peerInfo div peerPerPod
+    # let port = 5000 + (peerInfo mod peerPerPod)
+    # let tAddress = "pod-" & $number & ":" & $port
+    let tAddress = "nimp2p-service:5000"
     echo "Will connect to peer " , peerInfo
     echo "Service : ", tAddress
 

@@ -14,7 +14,7 @@ RUN nimble c -d:chronicles_colors=None --threads:on -d:metrics -d:libp2p_network
 
 FROM nimlang/nim:1.6.18
 
-RUN apt-get update && apt-get install cron -y
+RUN apt-get install cron -y
 
 WORKDIR /node
 
