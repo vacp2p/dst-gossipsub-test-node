@@ -131,10 +131,6 @@ proc main {.async.} =
   echo "Waiting 60 seconds for node building..."
   await sleepAsync(60.seconds)
 
-  var peersInfo = toSeq(0..<parseInt(getEnv("PEERS")))
-  # var peerPerPod = parseInt(getEnv("PEERSPERPOD"))
-  rng.shuffle(peersInfo)
-
   proc pinger(peerId: PeerId) {.async.} =
     try:
       await sleepAsync(20.seconds)
@@ -150,33 +146,31 @@ proc main {.async.} =
 
   let connectTo = parseInt(getEnv("CONNECTTO"))
   var connected = 0
-  for peerInfo in peersInfo:
+  let tAddress = "nimp2p-service:5000"
+  var addrs: seq[MultiAddress]
+
+  echo "Trying to resolve ", tAddress
+  while true:
+    try:
+      addrs = resolveTAddress(tAddress).mapIt(MultiAddress.init(it).tryGet())
+      echo tAddress, " resolved: ", addrs
+      break  # Break out of the loop on successful resolution
+    except CatchableError as exc:
+      echo "Failed to resolve address:", exc.msg
+      echo "Waiting 15 seconds..."
+      await sleepAsync(15.seconds)
+
+  rng.shuffle(addrs)
+  var index = 0
+  while true:
     if connected >= connectTo: break
-    # let number = peerInfo div peerPerPod
-    # let port = 5000 + (peerInfo mod peerPerPod)
-    # let tAddress = "pod-" & $number & ":" & $port
-    let tAddress = "nimp2p-service:5000"
-    echo "Will connect to peer " , peerInfo
-    echo "Service : ", tAddress
-
-    var addrs: seq[MultiAddress]
-    echo "Trying to resolve ", tAddress
     while true:
       try:
-        addrs = resolveTAddress(tAddress).mapIt(MultiAddress.init(it).tryGet())
-        echo tAddress, " resolved: ", addrs
-        break  # Break out of the loop on successful resolution
-      except CatchableError as exc:
-        echo "Failed to resolve address:", exc.msg
-        echo "Waiting 15 seconds..."
-        await sleepAsync(15.seconds)
-
-    while true:
-      try:
-        echo "Trying to connect to ", addrs[0]
-        let peerId = await switch.connect(addrs[0], allowUnknownPeerId=true).wait(5.seconds)
+        echo "Trying to connect to ", addrs[index]
+        let peerId = await switch.connect(addrs[index], allowUnknownPeerId=true).wait(5.seconds)
         #asyncSpawn pinger(peerId)
         connected.inc()
+        index.inc()
         echo "Connected!"
         break
       except CatchableError as exc:
