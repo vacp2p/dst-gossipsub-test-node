@@ -1,0 +1,3 @@
+--noNimblePath
+--path:"/mnt/d/Projects/status/dst-gossipsub-test-node/vendor/nimbus-build-system"
+--path:"/mnt/d/Projects/status/dst-gossipsub-test-node/vendor/nim-libp2p"

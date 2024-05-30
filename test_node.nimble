@@ -1,6 +1,6 @@
 mode = ScriptMode.Verbose
 
-packageName   = "test_node"
+packageName   = "dstnode"
 version       = "0.1.0"
 author        = "Status Research & Development GmbH"
 description   = "A test node for gossipsub"
