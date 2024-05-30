@@ -1,30 +1,51 @@
-# Create the build image
-FROM nimlang/nim:1.6.18 as build
+# BUILD NIM APP ----------------------------------------------------------------
+FROM rust:1.77.1-alpine3.18  AS nim-build
 
-# Copy the wls files to the production image
-WORKDIR /node
+ARG NIMFLAGS
+ARG MAKE_TARGET
+ARG NIM_COMMIT
+
+# Get build tools and required header files
+RUN apk add --no-cache bash git build-base pcre-dev linux-headers curl jq
+
+WORKDIR /app
 COPY . .
 
-RUN git config --global http.sslVerify false
+# workaround for alpine issue: https://github.com/alpinelinux/docker-alpine/issues/383
+RUN apk update && apk upgrade
 
-RUN nimble install -dy
+# Ran separately from 'make' to avoid re-doing
+RUN git submodule update --init --recursive
 
-RUN nimble c -d:chronicles_colors=None --threads:on -d:metrics -d:libp2p_network_protocols_metrics  -d:release main
+# Slowest build step for the sake of caching layers
+RUN make -j$(nproc) deps QUICK_AND_DIRTY_COMPILER=1
 
+# Build the final node binary
+RUN make -j$(nproc) $MAKE_TARGET NIMFLAGS="${NIMFLAGS}"
 
-FROM nimlang/nim:1.6.18
+# PRODUCTION IMAGE -------------------------------------------------------------
 
-RUN apt-get install cron -y
+FROM alpine:3.18 as prod
+
+ARG MAKE_TARGET=dstnode
+
+LABEL maintainer="asoutullo@status.im"
+LABEL source="https://github.com/vacp2p/dst-gossipsub-test-node/tree/dockerized"
+
+# LibP2P, Metrics ports
+EXPOSE 5000 8000
+
+# Referenced in the binary
+RUN apk add --no-cache busybox-suid \
+    && apk add --no-cache --update busybox-extras
+
+# Copy to separate location to accomodate different MAKE_TARGET values
+COPY --from=nim-build /app/build/$MAKE_TARGET /node/main
 
 WORKDIR /node
-
-COPY --from=build /node/main /node/main
 
 COPY cron_runner.sh .
 
 RUN chmod +x cron_runner.sh
-RUN chmod +x main
-
-EXPOSE 5000
 
 ENTRYPOINT ["./cron_runner.sh"]
