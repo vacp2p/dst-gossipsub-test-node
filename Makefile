@@ -5,6 +5,19 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 BUILD_SYSTEM_DIR := vendor/nimbus-build-system
+EXCLUDED_NIM_PACKAGES := vendor/nim-chronicles/vendor \
+	vendor/nim-chronos/vendor \
+	vendor/nim-faststreams/vendor \
+	vendor/nim-http-utils/vendor \
+	vendor/nim-results/vendor \
+	vendor/nim-json-serialization/vendor \
+	vendor/nim-serialization/vendor \
+	vendor/nim-metrics/vendor \
+	vendor/nimcrypto/vendor \
+	vendor/nim-bearssl/vendor \
+	vendor/nim-secp256k1/vendor \
+	vendor/nim-libp2p/vendor
+
 
 # we don't want an error here, so we can handle things later, in the ".DEFAULT" target
 -include $(BUILD_SYSTEM_DIR)/makefiles/variables.mk
@@ -27,13 +40,20 @@ else # "variables.mk" was included. Business as usual until the end of this file
 # must be included after the default target
 -include $(BUILD_SYSTEM_DIR)/makefiles/targets.mk
 
-.PHONY: deps
+.PHONY: deps dstnode
 
-deps: | deps-common
+dstnode.nims:
+	ln -s dstnode.nimble $@
+
+update: | update-common
+	rm -rf dstnode.nims && \
+        $(MAKE) dstnode.nims $(HANDLE_OUTPUT)
+
+deps: | deps-common dstnode.nims
 
 dstnode: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
-	    $(ENV_SCRIPT) nim dstnode $(NIM_PARAMS)
+	    $(ENV_SCRIPT) nim dstnode $(NIM_PARAMS) dstnode.nims
 
 clean: | clean-common
 	rm -rf build/dstnode
@@ -52,7 +72,8 @@ docker-image:
 		--build-arg="MAKE_TARGET=$(MAKE_TARGET)" \
 		--build-arg="NIMFLAGS=$(DOCKER_IMAGE_NIMFLAGS)" \
 		--target prod \
-		--tag $(DOCKER_IMAGE_TAG) .
+		--tag $(DOCKER_IMAGE_TAG) . \
+		--progress=plain
 
 docker-push:
 	docker push $(DOCKER_IMAGE_TAG)

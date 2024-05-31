@@ -14,6 +14,8 @@ COPY . .
 # workaround for alpine issue: https://github.com/alpinelinux/docker-alpine/issues/383
 RUN apk update && apk upgrade
 
+RUN cat .gitmodules
+
 # Ran separately from 'make' to avoid re-doing
 RUN git submodule update --init --recursive
 
@@ -27,8 +29,6 @@ RUN make -j$(nproc) $MAKE_TARGET NIMFLAGS="${NIMFLAGS}"
 
 FROM alpine:3.18 as prod
 
-ARG MAKE_TARGET=dstnode
-
 LABEL maintainer="asoutullo@status.im"
 LABEL source="https://github.com/vacp2p/dst-gossipsub-test-node/tree/dockerized"
 
@@ -40,7 +40,7 @@ RUN apk add --no-cache busybox-suid \
     && apk add --no-cache --update busybox-extras
 
 # Copy to separate location to accomodate different MAKE_TARGET values
-COPY --from=nim-build /app/build/$MAKE_TARGET /node/main
+COPY --from=nim-build /app/build/ /node/main
 
 WORKDIR /node
 
