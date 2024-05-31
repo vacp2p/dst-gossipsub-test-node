@@ -5,19 +5,6 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 BUILD_SYSTEM_DIR := vendor/nimbus-build-system
-EXCLUDED_NIM_PACKAGES := vendor/nim-chronicles/vendor \
-	vendor/nim-chronos/vendor \
-	vendor/nim-faststreams/vendor \
-	vendor/nim-http-utils/vendor \
-	vendor/nim-results/vendor \
-	vendor/nim-json-serialization/vendor \
-	vendor/nim-serialization/vendor \
-	vendor/nim-metrics/vendor \
-	vendor/nimcrypto/vendor \
-	vendor/nim-bearssl/vendor \
-	vendor/nim-secp256k1/vendor \
-	vendor/nim-libp2p/vendor
-
 
 # we don't want an error here, so we can handle things later, in the ".DEFAULT" target
 -include $(BUILD_SYSTEM_DIR)/makefiles/variables.mk
@@ -66,7 +53,7 @@ clean: | clean-common
 DOCKER_IMAGE_NIMFLAGS := -d:chronicles_colors:none -d:insecure --threads:on -d:metrics -d:libp2p_network_protocols_metrics -d:release
 # build a docker image
 docker-image: MAKE_TARGET ?= dstnode
-docker-image: DOCKER_IMAGE_TAG ?= asoutullo/dst-test-node:v0.2
+docker-image: DOCKER_IMAGE_TAG ?= soutullostatus/dst-test-node:v1.2
 docker-image:
 	docker build \
 		--build-arg="MAKE_TARGET=$(MAKE_TARGET)" \

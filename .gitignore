@@ -2,3 +2,4 @@ nimbledeps/*
 *.exe
 stew/*
 nim-stew-master/*
+.idea/
