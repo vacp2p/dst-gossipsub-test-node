@@ -11,6 +11,8 @@ hours="$2"
 cron_expression="$minutes $hours * * *"
 
 cron_job_file="/etc/cron.d/my-cron-job"
+mkdir -p /etc/cron.d
+
 echo -e "$cron_expression /node/main  > /proc/1/fd/1 2>&1 \n" > "$cron_job_file"
 
 echo "Cron job file created at $cron_job_file"
@@ -19,4 +21,4 @@ env >> /etc/environment
 
 crontab /etc/cron.d/my-cron-job
 
-cron -f
+crond -f

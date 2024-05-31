@@ -14,8 +14,6 @@ COPY . .
 # workaround for alpine issue: https://github.com/alpinelinux/docker-alpine/issues/383
 RUN apk update && apk upgrade
 
-RUN cat .gitmodules
-
 # Ran separately from 'make' to avoid re-doing
 RUN git submodule update --init --recursive
 
@@ -33,11 +31,12 @@ LABEL maintainer="asoutullo@status.im"
 LABEL source="https://github.com/vacp2p/dst-gossipsub-test-node/tree/dockerized"
 
 # LibP2P, Metrics ports
-EXPOSE 5000 8000
+EXPOSE 5000 8008
 
 # Referenced in the binary
 RUN apk add --no-cache busybox-suid \
-    && apk add --no-cache --update busybox-extras
+    && apk add --no-cache --update busybox-extras \
+    && apk add --no-cache bash
 
 # Copy to separate location to accomodate different MAKE_TARGET values
 COPY --from=nim-build /app/build/ /node/main
