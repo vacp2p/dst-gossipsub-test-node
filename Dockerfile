@@ -39,12 +39,13 @@ RUN apk add --no-cache busybox-suid \
     && apk add --no-cache bash
 
 # Copy to separate location to accomodate different MAKE_TARGET values
-COPY --from=nim-build /app/build/ /node/main
+COPY --from=nim-build /app/build/main /node/main
 
 WORKDIR /node
 
 COPY cron_runner.sh .
 
+RUN chmod +x /node/main
 RUN chmod +x cron_runner.sh
 
 ENTRYPOINT ["./cron_runner.sh"]
