@@ -71,7 +71,7 @@ proc main {.async.} =
     pingProtocol = Ping.new(rng=rng)
   # Metrics
   echo "Starting metrics HTTP server"
-  let metricsServer = startMetricsServer(parseIpAddress("0.0.0.0"), Port(8000))
+  let metricsServer = startMetricsServer(parseIpAddress("0.0.0.0"), Port(8008))
 
   gossipSub.parameters.floodPublish = true
   #gossipSub.parameters.lazyPushThreshold = 1_000_000_000
