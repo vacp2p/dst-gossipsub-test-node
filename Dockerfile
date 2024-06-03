@@ -25,6 +25,6 @@ COPY cron_runner.sh .
 RUN chmod +x cron_runner.sh
 RUN chmod +x main
 
-EXPOSE 5000
+EXPOSE 5000 8008
 
 ENTRYPOINT ["./cron_runner.sh"]
