@@ -42,13 +42,14 @@ fi
 
 
 rm -f shadowlog* latencies* stats* main && rm -rf shadow.data/
-nim c -d:chronicles_colors=None --threads:on -d:metrics -d:libp2p_network_protocols_metrics -d:release main 
+#nim c -d:chronicles_colors=None --threads:on -d:metrics -d:libp2p_network_protocols_metrics -d:release main 
+go build .
 
 for i in $(seq $runs); do
     echo "Running for turn "$i
     shadow shadow.yaml > shadowlog$i && 
-        grep -rne 'milliseconds\|BW' shadow.data/ > latencies$i && 
-        grep -rne 'statcounters:' shadow.data/ > stats$i
+        grep -rne 'milliseconds\|BW' shadow.data/ > latencies$i 
+        #grep -rne 'statcounters:' shadow.data/ > stats$i
     #uncomment to to receive every nodes log in shadow data (only if runs == 1, or change data directory in yaml file)
     #rm -rf shadow.data/
 done
@@ -61,5 +62,5 @@ for i in $(seq $runs); do
 	awk -f summary_latency_large.awk latencies$i	#estimated coverage for large messages (TxTime adds to latency)
     fi
     awk -f summary_shadowlog.awk shadowlog$i
-    awk -f summary_dontwant.awk stats$i    
+    #awk -f summary_dontwant.awk stats$i    
 done
