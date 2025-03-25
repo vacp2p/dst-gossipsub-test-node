@@ -8,5 +8,6 @@ license       = "MIT"
 skipDirs      = @[]
 
 requires "nim >= 1.6.0",
-          "libp2p",
-          "ggplotnim"
+         "https://github.com/AkshayaMani/nim-libp2p#feat/gossipsub-custom-conn",
+         "https://github.com/vacp2p/mix#poc/gossipsub",
+         "ggplotnim"
