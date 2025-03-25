@@ -1,12 +1,38 @@
-import stew/endians2, stew/byteutils, tables, strutils, os
-import libp2p, libp2p/protocols/pubsub/rpc/messages
-import libp2p/muxers/mplex/lpchannel, libp2p/protocols/ping
-import chronos
-import sequtils, hashes, math, metrics, metrics/chronos_httpserver
+import chronos, chronicles, hashes, math, sequtils, strutils, tables, os
+import metrics, metrics/chronos_httpserver
+import stew/[byteutils, endians2]
+import std/[enumerate, options, strformat, sysrand]
+import entry_connection, entry_connection_callbacks, mix_node, mix_protocol, protocol
+import
+  libp2p,
+  libp2p/[
+    crypto/secp,
+    multiaddress,
+    builders,
+    muxers/mplex/lpchannel,
+    protocols/pubsub/gossipsub,
+    protocols/pubsub/pubsubpeer,
+    protocols/pubsub/rpc/messages,
+    transports/tcptransport,
+  ]
 from times import getTime, toUnix, fromUnix, `-`, initTime, `$`, inMilliseconds
 from nativesockets import getHostname
 
 const chunks = 1
+
+proc createSwitch(libp2pPrivKey: SkPrivateKey, multiAddr: MultiAddress): Switch =
+  let
+    inTimeout: Duration = 5.minutes
+    outTimeout: Duration = 5.minutes
+  result = SwitchBuilder
+    .new()
+    .withPrivateKey(PrivateKey(scheme: Secp256k1, skkey: libp2pPrivKey))
+    .withAddress(multiAddr)
+    .withRng(crypto.newRng())
+    .withMplex(inTimeout, outTimeout)
+    .withTcpTransport()
+    .withNoise()
+    .build()
 
 proc msgIdProvider(m: Message): Result[MessageId, ValidationResult] =
   return ok(($m.data.hash).toBytes())
@@ -29,7 +55,7 @@ proc startMetricsServer(
   info "Metrics HTTP server started", serverIp = $serverIp, serverPort = $serverPort
   ok(metricsServerRes.value)
 
-proc main {.async.} =
+proc main() {.async.} =
   let
     hostname = getHostname()
     myId = parseInt(getEnv("PEERNUMBER"))
@@ -49,26 +75,25 @@ proc main {.async.} =
     myport = 5000 + parseInt(getEnv("PEERNUMBER"))
     myaddress = "0.0.0.0:" & $myport
     address = initTAddress(myaddress)
-    switch =
-      SwitchBuilder
-        .new()
-        .withAddress(MultiAddress.init(address).tryGet())
-        .withRng(rng)
-        #.withYamux()
-        .withMplex()
-        .withMaxConnections(250)
-        .withTcpTransport(flags = {ServerFlags.TcpNoDelay})
-        #.withPlainText()
-        .withNoise()
-        .build()
+    switch = SwitchBuilder
+      .new()
+      .withAddress(MultiAddress.init(address).tryGet())
+      .withRng(rng)
+      #.withYamux()
+      .withMplex()
+      .withMaxConnections(250)
+      .withTcpTransport(flags = {ServerFlags.TcpNoDelay})
+      #.withPlainText()
+      .withNoise()
+      .build()
     gossipSub = GossipSub.init(
       switch = switch,
-#      triggerSelf = true,
+      #      triggerSelf = true,
       msgIdProvider = msgIdProvider,
       verifySignature = false,
       anonymize = true,
-      )
-    pingProtocol = Ping.new(rng=rng)
+    )
+    pingProtocol = Ping.new(rng = rng)
   # Metrics
   echo "Starting metrics HTTP server"
   let metricsServer = startMetricsServer(parseIpAddress("0.0.0.0"), Port(8008))
@@ -90,18 +115,20 @@ proc main {.async.} =
     topicWeight: 1,
     firstMessageDeliveriesWeight: 1,
     firstMessageDeliveriesCap: 30,
-    firstMessageDeliveriesDecay: 0.9
+    firstMessageDeliveriesDecay: 0.9,
   )
 
   var messagesChunks: CountTable[uint64]
   proc messageHandler(topic: string, data: seq[byte]) {.async.} =
     let sentUint = uint64.fromBytesLE(data)
     # warm-up
-    if sentUint < 1000000: return
+    if sentUint < 1000000:
+      return
     #if isAttacker: return
 
     messagesChunks.inc(sentUint)
-    if messagesChunks[sentUint] < chunks: return
+    if messagesChunks[sentUint] < chunks:
+      return
     let
       sentMoment = nanoseconds(int64(uint64.fromBytesLE(data)))
       sentNanosecs = nanoseconds(sentMoment - seconds(sentMoment.seconds))
@@ -109,11 +136,12 @@ proc main {.async.} =
       diff = getTime() - sentDate
     echo sentUint, " milliseconds: ", diff.inMilliseconds()
 
-
   var
     startOfTest: Moment
     attackAfter = 10000.hours
-  proc messageValidator(topic: string, msg: Message): Future[ValidationResult] {.async.} =
+  proc messageValidator(
+      topic: string, msg: Message
+  ): Future[ValidationResult] {.async.} =
     if isAttacker and Moment.now - startOfTest >= attackAfter:
       return ValidationResult.Ignore
 
@@ -143,7 +171,6 @@ proc main {.async.} =
     except:
       echo "Failed to ping"
 
-
   let connectTo = parseInt(getEnv("CONNECTTO"))
   var connected = 0
   let tAddress = "nimp2p-service:5000"
@@ -154,7 +181,7 @@ proc main {.async.} =
     try:
       addrs = resolveTAddress(tAddress).mapIt(MultiAddress.init(it).tryGet())
       echo tAddress, " resolved: ", addrs
-      break  # Break out of the loop on successful resolution
+      break # Break out of the loop on successful resolution
     except CatchableError as exc:
       echo "Failed to resolve address:", exc.msg
       echo "Waiting 15 seconds..."
@@ -163,11 +190,13 @@ proc main {.async.} =
   rng.shuffle(addrs)
   var index = 0
   while true:
-    if connected >= connectTo: break
+    if connected >= connectTo:
+      break
     while true:
       try:
         echo "Trying to connect to ", addrs[index]
-        let peerId = await switch.connect(addrs[index], allowUnknownPeerId=true).wait(5.seconds)
+        let peerId =
+          await switch.connect(addrs[index], allowUnknownPeerId = true).wait(5.seconds)
         #asyncSpawn pinger(peerId)
         connected.inc()
         index.inc()
@@ -185,12 +214,12 @@ proc main {.async.} =
 
   echo "Mesh size: ", gossipSub.mesh.getOrDefault("test").len
 
-  let turnToPublish = parseInt(getHostname()[4..^1])
+  let turnToPublish = parseInt(getHostname()[4 ..^ 1])
   echo "Publishing turn is: ", turnToPublish
-  for msg in 0 ..< 10000:#client.param(int, "message_count"):
+  for msg in 0 ..< 10000: #client.param(int, "message_count"):
     await sleepAsync(msg_rate)
     if msg mod publisherCount == turnToPublish:
-      echo "Sending message at: " ,times.getTime()
+      echo "Sending message at: ", times.getTime()
       let
         now = getTime()
         nowInt = seconds(now.toUnix()) + nanoseconds(times.nanosecond(now))
