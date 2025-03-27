@@ -149,12 +149,13 @@ func createGSParams(dAnnounce int) pubsub.GossipSubParams {
 	gsParams.GossipFactor = 0.05
 	gsParams.IDontWantMessageThreshold = 1000
 	//GossipSubv2.0 specific, uncomment for GossipSubv2.0
-	//gsParams.HistoryLength = 6
-	//gsParams.HistoryGossip = 3
-	//gsParams.Dannounce = dAnnounce
-	//gsParams.Timeout = time.Duration(1000) * time.Millisecond
-
-	return gsParams
+	/*
+		gsParams.HistoryLength = 6
+		gsParams.HistoryGossip = 3
+		gsParams.Dannounce = dAnnounce
+		gsParams.Timeout = 1000 * time.Millisecond
+		return gsParams
+	*/
 }
 
 func main() {
@@ -174,7 +175,14 @@ func main() {
 	}
 	fmt.Println("", myID, isPublisher, h.ID())
 
+	//For GossipSubv1.2
 	ps, err := pubsub.NewGossipSub(ctx, h, pubsub.WithGossipSubParams(gsParams), pubsub.WithFloodPublish(false))
+	//For GossipSubv2.0
+	/*
+		ps, err := pubsub.NewGossipSub(ctx, h, pubsub.WithGossipSubParams(gsParams), pubsub.WithFloodPublish(false),
+			pubsub.WithPeerOutboundQueueSize(600), pubsub.WithMaxMessageSize(10*1<<20),
+			pubsub.WithValidateQueueSize(600))
+	*/
 	if err != nil {
 		println("Error starting pubsub protocol", err)
 		panic(err)

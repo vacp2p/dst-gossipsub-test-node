@@ -268,6 +268,8 @@ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZb
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/ppopth/go-libp2p-pubsub v0.11.1-0.20250220140754-6067316d7488 h1:NBiN3v6EdU+750mSpPJPVdpPvDqfgcjYK7cjQGaqDfI=
 github.com/ppopth/go-libp2p-pubsub v0.11.1-0.20250220140754-6067316d7488/go.mod h1:m0gpUOyrXKXdE7c8FNQ9/HLfWbxaEw7xku45w+PaqZo=
+github.com/ppopth/go-libp2p-pubsub v0.11.1-0.20250305042130-cfecb8a59877 h1:cr/Yc7eGX+KLQx9YQ/IamRn2CQxES0k9vWEyhkLJEXo=
+github.com/ppopth/go-libp2p-pubsub v0.11.1-0.20250305042130-cfecb8a59877/go.mod h1:m0gpUOyrXKXdE7c8FNQ9/HLfWbxaEw7xku45w+PaqZo=
 github.com/prometheus/client_golang v0.8.0/go.mod h1:7SWBe2y4D6OKWSNQJUaRYU/AaXPKyh/dDVn+NZz0KFw=
 github.com/prometheus/client_golang v1.20.5 h1:cxppBPuYhUnsO6yo/aoRol4L7q7UFfdm+bR9r+8l63Y=
 github.com/prometheus/client_golang v1.20.5/go.mod h1:PIEt8X02hGcP8JWbeHyeZ53Y/jReSnHgO035n//V5WE=

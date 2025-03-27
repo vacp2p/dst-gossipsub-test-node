@@ -19,31 +19,31 @@ hosts:
     processes:
     - path: ./main
       start_time: 5s
-      environment: {"PEERS": "100", "CONNECTTO": "5", "MSG_SIZE": "15000", "FRAGMENTS": "1", "PUBLISHERS": "4", "PUBLISHER_ID": "0", "MESSAGE_DELAY": "3000", "DANNOUNCE": "0"}
+      environment: {"PEERS": "100", "CONNECTTO": "5", "MSG_SIZE": "50000", "FRAGMENTS": "1", "PUBLISHERS": "5", "PUBLISHER_ID": "0", "MESSAGE_DELAY": "4000", "DANNOUNCE": "7"}
   peer2: &client_host1
     network_node_id: 1
     processes:
     - path: ./main
       start_time: 5s
-      environment: {"PEERS": "100", "CONNECTTO": "5", "MSG_SIZE": "15000", "FRAGMENTS": "1", "PUBLISHERS": "4", "PUBLISHER_ID": "0", "MESSAGE_DELAY": "3000", "DANNOUNCE": "0"}
+      environment: {"PEERS": "100", "CONNECTTO": "5", "MSG_SIZE": "50000", "FRAGMENTS": "1", "PUBLISHERS": "5", "PUBLISHER_ID": "0", "MESSAGE_DELAY": "4000", "DANNOUNCE": "7"}
   peer3: &client_host2
     network_node_id: 2
     processes:
     - path: ./main
       start_time: 5s
-      environment: {"PEERS": "100", "CONNECTTO": "5", "MSG_SIZE": "15000", "FRAGMENTS": "1", "PUBLISHERS": "4", "PUBLISHER_ID": "0", "MESSAGE_DELAY": "3000", "DANNOUNCE": "0"}
+      environment: {"PEERS": "100", "CONNECTTO": "5", "MSG_SIZE": "50000", "FRAGMENTS": "1", "PUBLISHERS": "5", "PUBLISHER_ID": "0", "MESSAGE_DELAY": "4000", "DANNOUNCE": "7"}
   peer4: &client_host3
     network_node_id: 3
     processes:
     - path: ./main
       start_time: 5s
-      environment: {"PEERS": "100", "CONNECTTO": "5", "MSG_SIZE": "15000", "FRAGMENTS": "1", "PUBLISHERS": "4", "PUBLISHER_ID": "0", "MESSAGE_DELAY": "3000", "DANNOUNCE": "0"}
+      environment: {"PEERS": "100", "CONNECTTO": "5", "MSG_SIZE": "50000", "FRAGMENTS": "1", "PUBLISHERS": "5", "PUBLISHER_ID": "0", "MESSAGE_DELAY": "4000", "DANNOUNCE": "7"}
   peer5: &client_host4
     network_node_id: 4
     processes:
     - path: ./main
       start_time: 5s
-      environment: {"PEERS": "100", "CONNECTTO": "5", "MSG_SIZE": "15000", "FRAGMENTS": "1", "PUBLISHERS": "4", "PUBLISHER_ID": "0", "MESSAGE_DELAY": "3000", "DANNOUNCE": "0"}
+      environment: {"PEERS": "100", "CONNECTTO": "5", "MSG_SIZE": "50000", "FRAGMENTS": "1", "PUBLISHERS": "5", "PUBLISHER_ID": "0", "MESSAGE_DELAY": "4000", "DANNOUNCE": "7"}
   peer6: *client_host0
   peer7: *client_host1
   peer8: *client_host2
