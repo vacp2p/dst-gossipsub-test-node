@@ -148,14 +148,14 @@ func createGSParams(dAnnounce int) pubsub.GossipSubParams {
 	gsParams.PruneBackoff = time.Minute
 	gsParams.GossipFactor = 0.05
 	gsParams.IDontWantMessageThreshold = 1000
-	//GossipSubv2.0 specific, uncomment for GossipSubv2.0
-	/*
+	if dAnnounce > 0 {
+		//GossipSubv2.0 specific
 		gsParams.HistoryLength = 6
 		gsParams.HistoryGossip = 3
 		gsParams.Dannounce = dAnnounce
 		gsParams.Timeout = 1000 * time.Millisecond
-		return gsParams
-	*/
+	}
+	return gsParams
 }
 
 func main() {
@@ -175,17 +175,20 @@ func main() {
 	}
 	fmt.Println("", myID, isPublisher, h.ID())
 
-	//For GossipSubv1.2
-	ps, err := pubsub.NewGossipSub(ctx, h, pubsub.WithGossipSubParams(gsParams), pubsub.WithFloodPublish(false))
-	//For GossipSubv2.0
-	/*
-		ps, err := pubsub.NewGossipSub(ctx, h, pubsub.WithGossipSubParams(gsParams), pubsub.WithFloodPublish(false),
+	var ps *pubsub.PubSub
+	var psErr error
+	if dAnnounce > 0 {
+		//For GossipSubv2.0
+		ps, psErr = pubsub.NewGossipSub(ctx, h, pubsub.WithGossipSubParams(gsParams), pubsub.WithFloodPublish(false),
 			pubsub.WithPeerOutboundQueueSize(600), pubsub.WithMaxMessageSize(10*1<<20),
-			pubsub.WithValidateQueueSize(600))
-	*/
-	if err != nil {
-		println("Error starting pubsub protocol", err)
-		panic(err)
+			pubsub.WithValidateQueueSize(600), pubsub.WithIgnoreIneed(false))
+	} else {
+		//For GossipSubv1.2
+		ps, psErr = pubsub.NewGossipSub(ctx, h, pubsub.WithGossipSubParams(gsParams), pubsub.WithFloodPublish(false))
+	}
+	if psErr != nil {
+		println("Error starting pubsub protocol", psErr)
+		panic(psErr)
 	}
 
 	topic, _ := ps.Join("test")
