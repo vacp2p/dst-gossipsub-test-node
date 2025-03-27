@@ -1,2 +1,9 @@
 nimbledeps/*
 *.exe
+shadow/network_topology.gml
+shadow/shadow.yaml
+shadow/main
+shadow/latencies*
+shadow/shadowlog*
+shadow/shadow.data/
+
