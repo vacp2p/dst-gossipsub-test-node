@@ -1,21 +1,20 @@
 #!/bin/sh
 set -e
 
-if [ $# -ne 14 ]; then
+if [ $# -ne 13 ]; then
     echo "Usage: $0 <runs> <nodes> <Message_size> <num_fragment> <num_publishers>
             <min_bandwidth> <max_bandwidth> <min_latency> <max_latency> <anchor_stages> 
-            <packet_loss> <publisher_id> <inter_message_delay> <D_announce>"
+            <packet_loss> <publisher_id> <inter_message_delay>"
     
     echo "The following sample command runs simulation 1 time, for a 1000 node network. Each published message size \
             is 15KB single-message (no-fragmentation). A total of 10 messages are transmitted in the network. \
             Peer bandwidth varies between 50-150 Mbps, Latency between 40-130ms, and bandwidth/latency is roughly \
             distributed in five different groups. No packet loss is introduced on edges. Peer 4 publishes all messages \
-            with 4000 ms inter-packet delay. see the generated network_topology.gml and shadow.yaml for peers/edges details. \
-            D_announce (only needed for gossipsub v2.0) is set to 7"
+            with 4000 ms inter-packet delay. see the generated network_topology.gml and shadow.yaml for peers/edges details"   
     
     echo "publisher_id is the peer that publishes messages. If 0, every peer sends 1 message (starting from peer1) "
-    elch "inter-message delay is time between messages (in milliseconds)"
-    echo "$0 1 1000 15000 1 10 50 150 40 130 5 0.0 4 4000 7" 
+    elch "inter-message delay is time between messages (in milliseconds). Must be greater than 1"
+    echo "$0 1 1000 15000 1 10 50 150 40 130 5 0.0 4 4000" 
     exit 1
 fi
 
@@ -32,7 +31,6 @@ steps="${10}"			#Number of variation steps between min/max latency and bandwidth
 pkt_loss="${11}"		#%age packet loss (not yet tested)
 publisher_id="${12}"	#this peer sends all messages. If 0, publishing starts from peer1
 message_delay="${13}"	#wait time (milliconds) before publishing next message
-D_announce="${14}"		#For go-libp2p GossipSub v2.0 only
 
 connect_to=5			#number of peers we connect with to form full message mesh
 
@@ -46,18 +44,19 @@ if [ -z "$PYTHON" ]; then
 fi
 
 "$PYTHON" topogen.py $nodes $min_bandwidth $max_bandwidth $min_latency $max_latency \
-        $steps $pkt_loss $msg_size $num_frag $num_publishers $publisher_id $message_delay $D_announce
+        $steps $pkt_loss $msg_size $num_frag $num_publishers $publisher_id $message_delay 0
 
 
 
 rm -f shadowlog* latencies* stats* main && rm -rf shadow.data/
-go build .
+#nim c -d:chronicles_colors=None --threads:on -d:metrics -d:libp2p_network_protocols_metrics -d:release main
+nim c --threads:on -d:release main
 
 for i in $(seq $runs); do
     echo "Running for turn "$i
     shadow shadow.yaml > shadowlog$i && 
         grep -rne 'milliseconds\|BW' shadow.data/ > latencies$i 
-        #grep -rne 'statcounters:' shadow.data/ > stats$i
+        grep -rne 'statcounters:' shadow.data/ > stats$i
     #uncomment to to receive every nodes log in shadow data (only if runs == 1, or change data directory in yaml file)
     #rm -rf shadow.data/
 done
@@ -70,5 +69,5 @@ for i in $(seq $runs); do
 	awk -f summary_latency_large.awk latencies$i	#estimated coverage for large messages (TxTime adds to latency)
     fi
     awk -f summary_shadowlog.awk shadowlog$i
-    #awk -f summary_dontwant.awk stats$i
+    awk -f summary_dontwant.awk stats$i
 done
