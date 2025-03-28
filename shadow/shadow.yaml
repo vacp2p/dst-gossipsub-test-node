@@ -19,31 +19,31 @@ hosts:
     processes:
     - path: ./main
       start_time: 5s
-      environment: {"PEERS": "100", "CONNECTTO": "5", "MSG_SIZE": "50000", "FRAGMENTS": "1", "PUBLISHERS": "5", "PUBLISHER_ID": "0", "MESSAGE_DELAY": "4000", "DANNOUNCE": "7"}
+      environment: {"PEERS": "60", "CONNECTTO": "5", "MSG_SIZE": "15000", "FRAGMENTS": "1", "PUBLISHERS": "5", "PUBLISHER_ID": "0", "MESSAGE_DELAY": "6000", "DANNOUNCE": "0"}
   peer2: &client_host1
     network_node_id: 1
     processes:
     - path: ./main
       start_time: 5s
-      environment: {"PEERS": "100", "CONNECTTO": "5", "MSG_SIZE": "50000", "FRAGMENTS": "1", "PUBLISHERS": "5", "PUBLISHER_ID": "0", "MESSAGE_DELAY": "4000", "DANNOUNCE": "7"}
+      environment: {"PEERS": "60", "CONNECTTO": "5", "MSG_SIZE": "15000", "FRAGMENTS": "1", "PUBLISHERS": "5", "PUBLISHER_ID": "0", "MESSAGE_DELAY": "6000", "DANNOUNCE": "0"}
   peer3: &client_host2
     network_node_id: 2
     processes:
     - path: ./main
       start_time: 5s
-      environment: {"PEERS": "100", "CONNECTTO": "5", "MSG_SIZE": "50000", "FRAGMENTS": "1", "PUBLISHERS": "5", "PUBLISHER_ID": "0", "MESSAGE_DELAY": "4000", "DANNOUNCE": "7"}
+      environment: {"PEERS": "60", "CONNECTTO": "5", "MSG_SIZE": "15000", "FRAGMENTS": "1", "PUBLISHERS": "5", "PUBLISHER_ID": "0", "MESSAGE_DELAY": "6000", "DANNOUNCE": "0"}
   peer4: &client_host3
     network_node_id: 3
     processes:
     - path: ./main
       start_time: 5s
-      environment: {"PEERS": "100", "CONNECTTO": "5", "MSG_SIZE": "50000", "FRAGMENTS": "1", "PUBLISHERS": "5", "PUBLISHER_ID": "0", "MESSAGE_DELAY": "4000", "DANNOUNCE": "7"}
+      environment: {"PEERS": "60", "CONNECTTO": "5", "MSG_SIZE": "15000", "FRAGMENTS": "1", "PUBLISHERS": "5", "PUBLISHER_ID": "0", "MESSAGE_DELAY": "6000", "DANNOUNCE": "0"}
   peer5: &client_host4
     network_node_id: 4
     processes:
     - path: ./main
       start_time: 5s
-      environment: {"PEERS": "100", "CONNECTTO": "5", "MSG_SIZE": "50000", "FRAGMENTS": "1", "PUBLISHERS": "5", "PUBLISHER_ID": "0", "MESSAGE_DELAY": "4000", "DANNOUNCE": "7"}
+      environment: {"PEERS": "60", "CONNECTTO": "5", "MSG_SIZE": "15000", "FRAGMENTS": "1", "PUBLISHERS": "5", "PUBLISHER_ID": "0", "MESSAGE_DELAY": "6000", "DANNOUNCE": "0"}
   peer6: *client_host0
   peer7: *client_host1
   peer8: *client_host2
@@ -99,43 +99,3 @@ hosts:
   peer58: *client_host2
   peer59: *client_host3
   peer60: *client_host4
-  peer61: *client_host0
-  peer62: *client_host1
-  peer63: *client_host2
-  peer64: *client_host3
-  peer65: *client_host4
-  peer66: *client_host0
-  peer67: *client_host1
-  peer68: *client_host2
-  peer69: *client_host3
-  peer70: *client_host4
-  peer71: *client_host0
-  peer72: *client_host1
-  peer73: *client_host2
-  peer74: *client_host3
-  peer75: *client_host4
-  peer76: *client_host0
-  peer77: *client_host1
-  peer78: *client_host2
-  peer79: *client_host3
-  peer80: *client_host4
-  peer81: *client_host0
-  peer82: *client_host1
-  peer83: *client_host2
-  peer84: *client_host3
-  peer85: *client_host4
-  peer86: *client_host0
-  peer87: *client_host1
-  peer88: *client_host2
-  peer89: *client_host3
-  peer90: *client_host4
-  peer91: *client_host0
-  peer92: *client_host1
-  peer93: *client_host2
-  peer94: *client_host3
-  peer95: *client_host4
-  peer96: *client_host0
-  peer97: *client_host1
-  peer98: *client_host2
-  peer99: *client_host3
-  peer100: *client_host4
