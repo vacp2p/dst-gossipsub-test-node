@@ -1,12 +1,29 @@
 import stew/endians2, stew/byteutils, tables, strutils, os
-import libp2p, libp2p/protocols/pubsub/rpc/messages
-import libp2p/muxers/mplex/lpchannel, libp2p/protocols/ping
-import chronos
+import "../../nim-libp2p/libp2p", "../../nim-libp2p/libp2p/protocols/pubsub/rpc/messages"
+import "../../nim-libp2p/libp2p/muxers/mplex/lpchannel", "../../nim-libp2p/libp2p/protocols/ping"
+
+import chronos, std/atomics
 import sequtils, hashes, math, metrics
 from times import getTime, toUnix, fromUnix, `-`, initTime, `$`, inMilliseconds
 from nativesockets import getHostname
 
-const chunks = 1
+#These parameters are passed from yaml file, and each defined peer may receive different parameters (e.g. message size)
+var
+  messageCount = parseInt(getEnv("PUBLISHERS"))
+  msg_size = parseInt(getEnv("MSG_SIZE")) 
+  chunks = parseInt(getEnv("FRAGMENTS"))
+  publisherID = parseInt(getEnv("PUBLISHER_ID"))
+  publishWait = parseInt(getEnv("MESSAGE_DELAY"))
+  connectTo   = parseInt(getEnv("CONNECTTO"))
+
+#we experiment with upto 10 fragments. 1 means, the messages are not fragmented
+if chunks < 1 or chunks > 10:     
+  chunks = 1
+
+let
+    pubStart = 1              #first publisher ID if publisherID set to 0                                         
+    warmup_messages = 2       #to raise cwnd, not included in stats
+    pubEnd = pubStart + messageCount + warmup_messages    #every publisher sends one message
 
 proc msgIdProvider(m: Message): Result[MessageId, ValidationResult] =
   return ok(($m.data.hash).toBytes())
@@ -15,14 +32,12 @@ proc main {.async.} =
   let
     hostname = getHostname()
     myId = parseInt(hostname[4..^1])
-    #publisherCount = client.param(int, "publisher_count")
-    publisherCount = 10
-    isPublisher = myId <= publisherCount
-    #isAttacker = (not isPublisher) and myId - publisherCount <= client.param(int, "attacker_count")
+    isPublisher = (myId == publisherID) or (myId >= pubStart and myId < pubEnd)
+    #isAttacker = (not isPublisher) and myId - messageCount <= client.param(int, "attacker_count")
     isAttacker = false
     rng = libp2p.newRng()
-    #randCountry = rng.rand(distribCumSummed[^1])
-    #country = distribCumSummed.find(distribCumSummed.filterIt(it >= randCountry)[0])
+  
+
   let
     address = initTAddress("0.0.0.0:5000")
     switch =
@@ -30,8 +45,8 @@ proc main {.async.} =
         .new()
         .withAddress(MultiAddress.init(address).tryGet())
         .withRng(rng)
-        #.withYamux()
-        .withMplex()
+        .withYamux()
+        #.withMplex()
         .withMaxConnections(10000)
         .withTcpTransport(flags = {ServerFlags.TcpNoDelay})
         #.withPlainText()
@@ -45,11 +60,11 @@ proc main {.async.} =
       anonymize = true,
       )
     pingProtocol = Ping.new(rng=rng)
-  gossipSub.parameters.floodPublish = false
+  gossipSub.parameters.floodPublish = false 
   #gossipSub.parameters.lazyPushThreshold = 1_000_000_000
   #gossipSub.parameters.lazyPushThreshold = 0
   gossipSub.parameters.opportunisticGraftThreshold = -10000
-  gossipSub.parameters.heartbeatInterval = 700.milliseconds
+  gossipSub.parameters.heartbeatInterval = 1000.milliseconds
   gossipSub.parameters.pruneBackoff = 3.seconds
   gossipSub.parameters.gossipFactor = 0.05
   gossipSub.parameters.d = 8
@@ -79,6 +94,7 @@ proc main {.async.} =
       sentNanosecs = nanoseconds(sentMoment - seconds(sentMoment.seconds))
       sentDate = initTime(sentMoment.seconds, sentNanosecs)
       diff = getTime() - sentDate
+
     echo sentUint, " milliseconds: ", diff.inMilliseconds()
 
 
@@ -118,10 +134,9 @@ proc main {.async.} =
       echo "Failed to ping"
 
 
-  let connectTo = parseInt(getEnv("CONNECTTO"))
   var connected = 0
   for peerInfo in peersInfo:
-    if connected >= connectTo: break
+    if connected > connectTo+2: break
     let tAddress = "peer" & $peerInfo & ":5000"
     echo tAddress
     let addrs = resolveTAddress(tAddress).mapIt(MultiAddress.init(it).tryGet())
@@ -132,29 +147,65 @@ proc main {.async.} =
     except CatchableError as exc:
       echo "Failed to dial", exc.msg
 
-  #let
-  #  maxMessageDelay = client.param(int, "max_message_delay")
-  #  warmupMessages = client.param(int, "warmup_messages")
-  #startOfTest = Moment.now() + milliseconds(warmupMessages * maxMessageDelay div 2)
+  await sleepAsync(12.seconds)
+  echo "Mesh size: ", gossipSub.mesh.getOrDefault("test").len, 
+      ", Total Peers Known : ", gossipSub.gossipsub.getOrDefault("test").len,
+#      ", Direct Peers : ", gossipSub.subscribedDirectPeers.getOrDefault("test").len,
+      ", Fanout", gossipSub.fanout.getOrDefault("test").len, 
+      ", Heartbeat : ", gossipSub.parameters.heartbeatInterval.milliseconds
 
-  await sleepAsync(10.seconds)
-  echo "Mesh size: ", gossipSub.mesh.getOrDefault("test").len
+  await sleepAsync(5.seconds)  
 
-  for msg in 0 ..< 10:#client.param(int, "message_count"):
-    await sleepAsync(12.seconds)
-    if msg mod publisherCount == myId - 1:
-    #if myId == 1:
+  # warmup message publishing, one message published every 5 seconds
+  # First 1-2 messages take longer than expected time due to low cwnd. 
+  # warmup_messages can set cwnd to a desired level. or alternatively, warmup messages can be set to 0
+  var nextSender: int 
+  for i in pubStart..<(pubStart + warmup_messages):
+    await sleepAsync(5.seconds)
+
+    if publisherID != 0:
+      nextSender = publisherID
+    else:
+      nextSender = i
+    
+    if nextSender == myId:
       let
-        now = getTime()
-        nowInt = seconds(now.toUnix()) + nanoseconds(times.nanosecond(now))
-      #var nowBytes = @(toBytesLE(uint64(nowInt.nanoseconds))) & newSeq[byte](500_000 div chunks)
-      var nowBytes = @(toBytesLE(uint64(nowInt.nanoseconds))) & newSeq[byte](50)
-      #echo "sending ", uint64(nowInt.nanoseconds)
+          now = getTime()
+          nowInt = seconds(now.toUnix()) + nanoseconds(times.nanosecond(now))
+      var nowBytes = @(toBytesLE(uint64(nowInt.nanoseconds))) & newSeq[byte](msg_size div chunks)
       for chunk in 0..<chunks:
         nowBytes[10] = byte(chunk)
         doAssert((await gossipSub.publish("test", nowBytes)) > 0)
+  #done sending warmup_messages , wait for short time
+  await sleepAsync(10.seconds)
 
-  #echo "BW: ", libp2p_protocols_bytes.value(labelValues=["/meshsub/1.1.0", "in"]) + libp2p_protocols_bytes.value(labelValues=["/meshsub/1.1.0", "out"])
-  #echo "DUPS: ", libp2p_gossipsub_duplicate.value(), " / ", libp2p_gossipsub_received.value()
+  #We now send messageCount messages
+  for msg in (pubStart + warmup_messages) ..< pubEnd:
+    #await sleepAsync(100.milliseconds)
+    await sleepAsync(publishWait.milliseconds)
+
+    if publisherID != 0:
+      nextSender = publisherID
+    else:
+      nextSender = msg
+
+    if nextSender == myId:
+      let
+        now = getTime()
+        nowInt = seconds(now.toUnix()) + nanoseconds(times.nanosecond(now))
+      var nowBytes = @(toBytesLE(uint64(nowInt.nanoseconds)+uint64(msg))) & newSeq[byte](msg_size div chunks)
+      for chunk in 0..<chunks:
+        nowBytes[10] = byte(chunk)
+        doAssert((await gossipSub.publish("test", nowBytes)) > 0)
+      echo "Done Publishing ", nowInt.nanoseconds
+  await sleepAsync(5.seconds)
+
+  #we need to export these counters from gossipsub.nim, or comment these
+  echo "statcounters: Dup_During_Validation ", lma_dup_during_validation.load(),
+       "\tDup_Received ", lma_duplicate_count.load(),
+       "\tIWANTS_Sent ", lma_iwants_sent.load(),
+       "\tIWANTS_Replied ", lma_iwants_replied.load(),
+       "\tIDontWant_Saves ", lma_idontwant_saves.load(),
+       "\tIMReceiving_Saves ", lma_imreceiving_saves.load()
 
 waitFor(main())

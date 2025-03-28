@@ -1,2 +1,14 @@
 nimbledeps/*
 *.exe
+shadow/network_topology.gml
+shadow/shadow.yaml
+shadow/main
+shadow/latencies*
+shadow/shadowlog*
+shadow/stats*
+shadow/shadow.data/
+shadow/rust/target/
+shadow/rust/.cargo/
+shadow/rust/Cargo.lock
+
+
