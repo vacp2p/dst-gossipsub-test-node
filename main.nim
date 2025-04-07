@@ -1,8 +1,10 @@
-import chronos, chronicles, hashes, math, sequtils, strutils, tables, os
+import chronos, chronicles, hashes, math, redis, sequtils, strutils, tables, os
 import metrics, metrics/chronos_httpserver
 import stew/[byteutils, endians2]
 import std/[enumerate, options, strformat, sysrand]
-import entry_connection, entry_connection_callbacks, mix_node, mix_protocol, protocol
+import node
+import
+  entry_connection, entry_connection_callbacks, mix_node, mix_protocol, protocol, utils
 import
   libp2p,
   libp2p/[
@@ -18,25 +20,56 @@ import
 from times import getTime, toUnix, fromUnix, `-`, initTime, `$`, inMilliseconds
 from nativesockets import getHostname
 
-proc createSwitch(id, port: int): Switch =
+proc createSwitch(id, port: int, r: Redis | AsyncRedis, isMix: bool): Switch =
   {.gcsafe.}:
-    discard initializeMixNodes(1, port)
+    var
+      multiAddrStr: string
+      libp2pPubKey: SkPublicKey
+      libp2pPrivKey: SkPrivateKey
 
-    let nodePubInfo = getMixPubInfoByIndex(0).valueOr:
-      error "Get mix pub info by index error", err = error
+    let idBytes = uint32ToBytes(uint32(id))
+
+    if isMix:
+      discard initializeMixNodes(1, port)
+
+      let writeNodeRes = writeMixNodeInfoToFile(mixNodes[0], id)
+      if writeNodeRes.isErr:
+        error "Failed to write mix info to file", nodeId = id
+        return
+
+      let nodePubInfo = getMixPubInfoByIndex(0).valueOr:
+        error "Get mix pub info by index error", err = error
+        return
+
+      let serializedPubInfo = serializeMixPubInfo(nodePubInfo).valueOr:
+        error "Failed to serialize mix pub info", err = error
+        return
+
+      let strPubInfo = cast[string](idBytes & serializedPubInfo)
+
+      discard r.lPush("mix", strPubInfo)
+
+      let mixNodeInfo = getMixNodeInfo(mixNodes[0])
+      multiAddrStr = mixNodeInfo[0]
+      libp2pPubKey = mixNodeInfo[3]
+      libp2pPrivKey = mixNodeInfo[4]
+
+    else:
+      discard initializeNodes(1, port)
+
+      (multiAddrStr, libp2pPubKey, libp2pPrivKey) = getNodeInfo(nodes[0])
+
+    let
+      nodeInfo = initNodeInfo(multiAddrStr, libp2pPubKey, libp2pPrivKey)
+      pubInfo = initPubInfo(multiAddrStr, libp2pPubKey)
+
+    let serializedPubInfo = serializePubInfo(pubInfo).valueOr:
+      error "Failed to serialize pub info", err = error
       return
 
-    let writePubRes = writePubInfoToFile(nodePubInfo, id)
-    if writePubRes.isErr:
-      error "Failed to write pub info to file", nodeId = id
-      return
+    let strPubInfo = cast[string](idBytes & serializedPubInfo)
 
-    let writeNodeRes = writeMixNodeInfoToFile(mixNodes[0], id)
-    if writeNodeRes.isErr:
-      error "Failed to write mix info to file", nodeId = id
-      return
-
-    let (multiAddrStr, _, _, _, libp2pPrivKey) = getMixNodeInfo(mixNodes[0])
+    discard r.lPush("libp2p", strPubInfo)
 
     let multiAddr = MultiAddress.init(multiAddrStr.split("/p2p/")[0]).valueOr:
       error "Failed to initialize MultiAddress", err = error
@@ -85,13 +118,23 @@ proc main() {.async.} =
     myId = parseInt(getEnv("PEERNUMBER"))
     msg_rate = parseInt(getEnv("MSGRATE"))
     msg_size = parseInt(getEnv("MSGSIZE"))
-    publisherCount = parseInt(getEnv("PEERS"))
+    publisherCount = parseInt(getEnv("PUBLISHERS"))
     isPublisher = myId <= publisherCount
+    isMix = isPublisher # Publishers will be the mix nodes for now
+    mixCount = publisherCount # Publishers will be the mix nodes for now
+    redisAddr = getEnv("REDISADDR", "redis:6379").split(":")
+    redisClient = open(redisAddr[0], Port(parseInt(redisAddr[1])))
+    connectTo = parseInt(getEnv("CONNECTTO"))
+    mixPoolSize = parseInt(getEnv("MIXPOOLSIZE"))
     rng = libp2p.newRng()
   echo "Hostname: ", hostname
+  if mixPoolSize > mixCount:
+    error "Mix pool size is greater than total mix count"
+    return
+
   let
     myport = 5000 + parseInt(getEnv("PEERNUMBER"))
-    switch = createSwitch(myId, myport)
+    switch = createSwitch(myId, myport, redisClient, isMix)
     gossipSub = GossipSub.init(
       switch = switch,
       triggerSelf = true,
@@ -104,6 +147,48 @@ proc main() {.async.} =
         )
       ),
     )
+
+  var
+    connected = 0
+    curPoolSize = 0
+    pool: seq[string] = @[]
+
+  while true:
+    await sleepAsync(5.seconds)
+    if curPoolSize == mixCount:
+      break
+
+    var mixList: seq[string] = @[]
+    try:
+      mixList = redisClient.lRange("mix", curPoolSize, -1)
+    except Exception as e:
+      warn "Error retrieving mix nodes", startInd = curPoolSize, err = e
+      continue
+    
+    pool.add(mixList[0 .. ^ 1])
+    curPoolSize += mixList.len
+  
+  rng.shuffle(pool)
+  let mixPool = pool[0..mixPoolSize]
+
+  for index, node in enumerate(mixPool):
+    let pubInfo = cast[seq[byte]](mixPool[index])
+    if len(pubInfo) != MixPubInfoSize + 4:
+      return err("Serialized id and pub info must be exactly " & $(MixPubInfoSize + 4) & " bytes")
+      
+      let id = bytesToUInt32(pubInfo[0 ..3]).valueOr:
+        error "Error in bytes to id conversion", err = error
+        return
+
+      let dMixPubInfo = deserializeMixPubInfo(pubInfo[4 ..^1]).valueOr:
+        error "Error in bytes to mix public info conversion", err = error
+        return
+
+      let writePubRes = writePubInfoToFile(dMixPubInfo, id)
+      if writePubRes.isErr:
+        error "Failed to write mix pub info to file", nodeId = id
+        return
+
   # Metrics
   echo "Starting metrics HTTP server"
   let metricsServer = startMetricsServer(parseIpAddress("0.0.0.0"), Port(8008))
