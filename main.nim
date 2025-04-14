@@ -1,7 +1,7 @@
 import chronos, chronicles, hashes, math, sequtils, strutils, tables, os
 import metrics, metrics/chronos_httpserver
 import stew/[byteutils, endians2]
-import std/[enumerate, options, strformat, sysrand]
+import std/[enumerate, options, strformat, sysrand, os, sequtils, dirs]
 
 import node
 import json
@@ -136,9 +136,22 @@ proc main() {.async.} =
     error "Mix pool size is greater than total mix count"
     return
 
+
   let
     myport = 5000 + parseInt(getEnv("PEERNUMBER"))
     switch = createSwitch(myId, myport, isMix, filePath)
+
+  await sleepAsync(5.seconds)
+
+  let files = toSeq(walkDir(filePath))
+    .filterIt(it[0] == pcFile and "mix" in it[1].extractFilename)
+    .mapIt(it[1])
+
+  for file in files:
+    let content = readFile(file).toBytes()
+    # TODO: 
+
+  let
     gossipSub = GossipSub.init(
       switch = switch,
       triggerSelf = true,
