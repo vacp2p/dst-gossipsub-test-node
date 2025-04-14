@@ -1,10 +1,11 @@
-import chronos, chronicles, hashes, math, redis, sequtils, strutils, tables, os
+import chronos, chronicles, hashes, math, sequtils, strutils, tables, os
 import metrics, metrics/chronos_httpserver
 import stew/[byteutils, endians2]
 import std/[enumerate, options, strformat, sysrand]
+
 import node
-import
-  entry_connection, entry_connection_callbacks, mix_node, mix_protocol, protocol, utils
+import json
+import mix/[entry_connection, entry_connection_callbacks, mix_node, mix_protocol, protocol, utils]
 import
   libp2p,
   libp2p/[
@@ -20,7 +21,14 @@ import
 from times import getTime, toUnix, fromUnix, `-`, initTime, `$`, inMilliseconds
 from nativesockets import getHostname
 
-proc createSwitch(id, port: int, r: Redis | AsyncRedis, isMix: bool): Switch =
+proc writeFile(filePath: string, peerId: string, data: seq[byte], fileType: string) =
+  var f = open(filePath & "/" & peerId & "-" & fileType, fmWrite)
+  if f.isNil:
+    quit "can't open file"
+  discard f.writeBytes(data, 0, len(data))
+  f.close()
+
+proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
   {.gcsafe.}:
     var
       multiAddrStr: string
@@ -45,9 +53,7 @@ proc createSwitch(id, port: int, r: Redis | AsyncRedis, isMix: bool): Switch =
         error "Failed to serialize mix pub info", err = error
         return
 
-      let strPubInfo = cast[string](idBytes & serializedPubInfo)
-
-      discard r.lPush("mix", strPubInfo)
+      writeFile(filePath, byteUtils.toHex(idBytes), idBytes & serializedPubInfo, "mix")
 
       let mixNodeInfo = getMixNodeInfo(mixNodes[0])
       multiAddrStr = mixNodeInfo[0]
@@ -67,13 +73,12 @@ proc createSwitch(id, port: int, r: Redis | AsyncRedis, isMix: bool): Switch =
       error "Failed to serialize pub info", err = error
       return
 
-    let strPubInfo = cast[string](idBytes & serializedPubInfo)
-
-    discard r.lPush("libp2p", strPubInfo)
-
-    let multiAddr = MultiAddress.init(multiAddrStr.split("/p2p/")[0]).valueOr:
+    let multiAddrParts = multiAddrStr.split("/p2p/")
+    let multiAddr = MultiAddress.init(multiAddrParts[0]).valueOr:
       error "Failed to initialize MultiAddress", err = error
       return
+
+    writeFile(filePath, multiAddrParts[1], idBytes & serializedPubInfo, "libp2p")
 
     let switch = SwitchBuilder
       .new()
@@ -122,10 +127,9 @@ proc main() {.async.} =
     isPublisher = myId <= publisherCount
     isMix = isPublisher # Publishers will be the mix nodes for now
     mixCount = publisherCount # Publishers will be the mix nodes for now
-    redisAddr = getEnv("REDISADDR", "redis:6379").split(":")
-    redisClient = open(redisAddr[0], Port(parseInt(redisAddr[1])))
     connectTo = parseInt(getEnv("CONNECTTO"))
     mixPoolSize = parseInt(getEnv("MIXPOOLSIZE"))
+    filePath = getEnv("FILEPATH")
     rng = libp2p.newRng()
   echo "Hostname: ", hostname
   if mixPoolSize > mixCount:
@@ -134,7 +138,7 @@ proc main() {.async.} =
 
   let
     myport = 5000 + parseInt(getEnv("PEERNUMBER"))
-    switch = createSwitch(myId, myport, redisClient, isMix)
+    switch = createSwitch(myId, myport, isMix, filePath)
     gossipSub = GossipSub.init(
       switch = switch,
       triggerSelf = true,

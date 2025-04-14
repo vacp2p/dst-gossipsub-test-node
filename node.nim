@@ -1,5 +1,5 @@
 import strformat
-import config, utils
+import mix/[config, utils]
 import libp2p/[crypto/crypto, crypto/secp, multiaddress, peerid]
 
 const NodeInfoSize* = addrSize + (SkRawPublicKeySize + SkRawPrivateKeySize)
