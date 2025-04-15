@@ -21,13 +21,6 @@ import
 from times import getTime, toUnix, fromUnix, `-`, initTime, `$`, inMilliseconds
 from nativesockets import getHostname
 
-proc writeFile(filePath: string, peerId: string, data: seq[byte], fileType: string) =
-  var f = open(filePath & "/" & peerId & "-" & fileType, fmWrite)
-  if f.isNil:
-    quit "can't open file"
-  discard f.writeBytes(data, 0, len(data))
-  f.close()
-
 proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
   {.gcsafe.}:
     var
@@ -49,11 +42,10 @@ proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
         error "Get mix pub info by index error", err = error
         return
 
-      let serializedPubInfo = serializeMixPubInfo(nodePubInfo).valueOr:
-        error "Failed to serialize mix pub info", err = error
+      let writePubInfoRes = writePubInfoToFile(nodePubInfo, id)
+      if writePubInfoRes.isErr:
+        error "Failed to write pub info to file", nodeId = id
         return
-
-      writeFile(filePath, byteUtils.toHex(idBytes), idBytes & serializedPubInfo, "mix")
 
       let mixNodeInfo = getMixNodeInfo(mixNodes[0])
       multiAddrStr = mixNodeInfo[0]
@@ -69,16 +61,10 @@ proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
       nodeInfo = initNodeInfo(multiAddrStr, libp2pPubKey, libp2pPrivKey)
       pubInfo = initPubInfo(multiAddrStr, libp2pPubKey)
 
-    let serializedPubInfo = serializePubInfo(pubInfo).valueOr:
-      error "Failed to serialize pub info", err = error
-      return
-
     let multiAddrParts = multiAddrStr.split("/p2p/")
     let multiAddr = MultiAddress.init(multiAddrParts[0]).valueOr:
       error "Failed to initialize MultiAddress", err = error
       return
-
-    writeFile(filePath, multiAddrParts[1], idBytes & serializedPubInfo, "libp2p")
 
     let switch = SwitchBuilder
       .new()
@@ -129,8 +115,9 @@ proc main() {.async.} =
     mixCount = publisherCount # Publishers will be the mix nodes for now
     connectTo = parseInt(getEnv("CONNECTTO"))
     mixPoolSize = parseInt(getEnv("MIXPOOLSIZE"))
-    filePath = getEnv("FILEPATH")
+    filePath = getEnv("FILEPATH", ".")
     rng = libp2p.newRng()
+
   echo "Hostname: ", hostname
   if mixPoolSize > mixCount:
     error "Mix pool size is greater than total mix count"
@@ -141,15 +128,31 @@ proc main() {.async.} =
     myport = 5000 + parseInt(getEnv("PEERNUMBER"))
     switch = createSwitch(myId, myport, isMix, filePath)
 
-  await sleepAsync(5.seconds)
+  await sleepAsync(10.seconds)
 
-  let files = toSeq(walkDir(filePath))
-    .filterIt(it[0] == pcFile and "mix" in it[1].extractFilename)
-    .mapIt(it[1])
 
-  for file in files:
-    let content = readFile(file).toBytes()
-    # TODO: 
+  let mixProto = MixProtocol.new(myId, mixCount, switch).expect("could not instantiate mix")
+
+  let mixConn = proc(
+        destAddr: Option[MultiAddress], destPeerId: PeerId, codec: string
+    ): Connection {.gcsafe, raises: [].} =
+      try:
+        return mixProto.createMixEntryConnection(destAddr, destPeerId, codec)
+      except CatchableError as e:
+        error "Error during execution of MixEntryConnection callback: ", err = e.msg
+        return nil
+
+  let mixPeerSelect = proc(
+      allPeers: HashSet[PubSubPeer],
+      directPeers: HashSet[PubSubPeer],
+      meshPeers: HashSet[PubSubPeer],
+      fanoutPeers: HashSet[PubSubPeer],
+    ): HashSet[PubSubPeer] {.gcsafe, raises: [].} =
+      try:
+        return mixPeerSelection(allPeers, directPeers, meshPeers, fanoutPeers)
+      except CatchableError as e:
+        error "Error during execution of MixPeerSelection callback: ", err = e.msg
+        return initHashSet[PubSubPeer]()
 
   let
     gossipSub = GossipSub.init(
@@ -166,10 +169,12 @@ proc main() {.async.} =
     )
 
   var
-    connected = 0
     curPoolSize = 0
     pool: seq[string] = @[]
 
+
+
+  #[
   while true:
     await sleepAsync(5.seconds)
     if curPoolSize == mixCount:
@@ -184,27 +189,32 @@ proc main() {.async.} =
     
     pool.add(mixList[0 .. ^ 1])
     curPoolSize += mixList.len
-  
+  ]#
+
+  #[
   rng.shuffle(pool)
   let mixPool = pool[0..mixPoolSize]
 
   for index, node in enumerate(mixPool):
     let pubInfo = cast[seq[byte]](mixPool[index])
     if len(pubInfo) != MixPubInfoSize + 4:
-      return err("Serialized id and pub info must be exactly " & $(MixPubInfoSize + 4) & " bytes")
+      error "Serialized id and pub info must be exactly " & $(MixPubInfoSize + 4) & " bytes"
+      return
       
-      let id = bytesToUInt32(pubInfo[0 ..3]).valueOr:
+      let id = bytesToUInt32(pubInfo[0..3]).valueOr:
         error "Error in bytes to id conversion", err = error
         return
 
-      let dMixPubInfo = deserializeMixPubInfo(pubInfo[4 ..^1]).valueOr:
+      let dMixPubInfo = deserializeMixPubInfo(pubInfo[4..^1]).valueOr:
         error "Error in bytes to mix public info conversion", err = error
         return
 
-      let writePubRes = writePubInfoToFile(dMixPubInfo, id)
+      let writePubRes = writePubInfoToFile(dMixPubInfo, int(id))
       if writePubRes.isErr:
         error "Failed to write mix pub info to file", nodeId = id
         return
+  ]#
+
 
   # Metrics
   echo "Starting metrics HTTP server"
@@ -256,22 +266,11 @@ proc main() {.async.} =
   echo "Waiting 60 seconds for node building..."
   await sleepAsync(60.seconds)
 
-  let connectTo = parseInt(getEnv("CONNECTTO"))
   var connected = 0
-  let tAddress = "nimp2p-service:5000"
   var addrs: seq[MultiAddress]
+  # TODO: get addrs
 
-  echo "Trying to resolve ", tAddress
-  while true:
-    try:
-      addrs = resolveTAddress(tAddress).mapIt(MultiAddress.init(it).tryGet())
-      echo tAddress, " resolved: ", addrs
-      break # Break out of the loop on successful resolution
-    except CatchableError as exc:
-      echo "Failed to resolve address:", exc.msg
-      echo "Waiting 15 seconds..."
-      await sleepAsync(15.seconds)
-
+ 
   rng.shuffle(addrs)
   var index = 0
   while true:
