@@ -1,8 +1,7 @@
 import chronos, chronicles, hashes, math, sequtils, strutils, tables, os
 import metrics, metrics/chronos_httpserver
 import stew/[byteutils, endians2]
-import std/[enumerate, options, strformat, sysrand, os, sequtils, dirs]
-
+import std/[enumerate, options, strformat, sysrand, os, sequtils, dirs, parseutils, random]
 import node
 import json
 import mix/[entry_connection, entry_connection_callbacks, mix_node, mix_protocol, protocol, utils]
@@ -104,6 +103,8 @@ proc startMetricsServer(
   ok(metricsServerRes.value)
 
 proc main() {.async.} =
+  randomize() 
+
   let
     hostname = getHostname()
     myId = parseInt(getEnv("PEERNUMBER"))
@@ -172,50 +173,6 @@ proc main() {.async.} =
     curPoolSize = 0
     pool: seq[string] = @[]
 
-
-
-  #[
-  while true:
-    await sleepAsync(5.seconds)
-    if curPoolSize == mixCount:
-      break
-
-    var mixList: seq[string] = @[]
-    try:
-      mixList = redisClient.lRange("mix", curPoolSize, -1)
-    except Exception as e:
-      warn "Error retrieving mix nodes", startInd = curPoolSize, err = e
-      continue
-    
-    pool.add(mixList[0 .. ^ 1])
-    curPoolSize += mixList.len
-  ]#
-
-  #[
-  rng.shuffle(pool)
-  let mixPool = pool[0..mixPoolSize]
-
-  for index, node in enumerate(mixPool):
-    let pubInfo = cast[seq[byte]](mixPool[index])
-    if len(pubInfo) != MixPubInfoSize + 4:
-      error "Serialized id and pub info must be exactly " & $(MixPubInfoSize + 4) & " bytes"
-      return
-      
-      let id = bytesToUInt32(pubInfo[0..3]).valueOr:
-        error "Error in bytes to id conversion", err = error
-        return
-
-      let dMixPubInfo = deserializeMixPubInfo(pubInfo[4..^1]).valueOr:
-        error "Error in bytes to mix public info conversion", err = error
-        return
-
-      let writePubRes = writePubInfoToFile(dMixPubInfo, int(id))
-      if writePubRes.isErr:
-        error "Failed to write mix pub info to file", nodeId = id
-        return
-  ]#
-
-
   # Metrics
   echo "Starting metrics HTTP server"
   let metricsServer = startMetricsServer(parseIpAddress("0.0.0.0"), Port(8008))
@@ -263,13 +220,17 @@ proc main() {.async.} =
 
   echo "Listening on ", switch.peerInfo.addrs
   echo myId, ", ", isPublisher, ", ", switch.peerInfo.peerId
-  echo "Waiting 60 seconds for node building..."
-  await sleepAsync(60.seconds)
+  echo "Waiting 15 seconds for node building..."
+  await sleepAsync(15.seconds)
 
   var connected = 0
   var addrs: seq[MultiAddress]
-  # TODO: get addrs
 
+  for i in 0..<mixCount:
+    let pubInfo = readMixPubInfoFromFile(i).expect("should be able to read mix pubinfo")
+    let (multiAddr, _, _) = getMixPubInfo(pubInfo)
+    let ma = MultiAddress.init(multiAddr).expect("should be a multiaddr")
+    addrs.add ma
  
   rng.shuffle(addrs)
   var index = 0
@@ -292,7 +253,11 @@ proc main() {.async.} =
 
   echo "Mesh size: ", gossipSub.mesh.getOrDefault("test").len
 
-  let turnToPublish = parseInt(getHostname()[4 ..^ 1])
+
+  var turnToPublish: int
+  if parseInt(getHostname()[4 ..^ 1], turnToPublish) == 0:
+    turnToPublish = rand(1..1000)  # Just a placeholder to test locally
+
   echo "Publishing turn is: ", turnToPublish
   for msg in 0 ..< 10000: #client.param(int, "message_count"):
     await sleepAsync(msg_rate)
