@@ -32,7 +32,7 @@ proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
     if isMix:
       discard initializeMixNodes(1, port)
 
-      let writeNodeRes = writeMixNodeInfoToFile(mixNodes[0], id)
+      let writeNodeRes = writeMixNodeInfoToFile(mixNodes[0], id, filePath)
       if writeNodeRes.isErr:
         error "Failed to write mix info to file", nodeId = id
         return
@@ -41,7 +41,7 @@ proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
         error "Get mix pub info by index error", err = error
         return
 
-      let writePubInfoRes = writePubInfoToFile(nodePubInfo, id)
+      let writePubInfoRes = writePubInfoToFile(nodePubInfo, id, filePath)
       if writePubInfoRes.isErr:
         error "Failed to write pub info to file", nodeId = id
         return
@@ -132,7 +132,7 @@ proc main() {.async.} =
   await sleepAsync(10.seconds)
 
 
-  let mixProto = MixProtocol.new(myId, mixCount, switch).expect("could not instantiate mix")
+  let mixProto = MixProtocol.new(myId, mixCount, switch, filePath).expect("could not instantiate mix")
 
   let mixConn = proc(
         destAddr: Option[MultiAddress], destPeerId: PeerId, codec: string
@@ -230,7 +230,7 @@ proc main() {.async.} =
     if i == myId:
       continue
 
-    let pubInfo = readMixPubInfoFromFile(i).expect("should be able to read mix pubinfo")
+    let pubInfo = readMixPubInfoFromFile(i, filePath).expect("should be able to read mix pubinfo")
     let (multiAddr, _, _) = getMixPubInfo(pubInfo)
     let ma = MultiAddress.init(multiAddr).expect("should be a multiaddr")
     addrs.add ma
@@ -257,7 +257,7 @@ proc main() {.async.} =
 
 
   await sleepAsync(2.seconds)
-  
+
   echo "Mesh size: ", gossipSub.mesh.getOrDefault("test").len
 
 
