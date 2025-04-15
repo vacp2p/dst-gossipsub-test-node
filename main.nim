@@ -227,6 +227,9 @@ proc main() {.async.} =
   var addrs: seq[MultiAddress]
 
   for i in 0..<mixCount:
+    if i == myId:
+      continue
+
     let pubInfo = readMixPubInfoFromFile(i).expect("should be able to read mix pubinfo")
     let (multiAddr, _, _) = getMixPubInfo(pubInfo)
     let ma = MultiAddress.init(multiAddr).expect("should be a multiaddr")
@@ -239,6 +242,7 @@ proc main() {.async.} =
       break
     while true:
       try:
+
         echo "Trying to connect to ", addrs[index]
         let peerId =
           await switch.connect(addrs[index], allowUnknownPeerId = true).wait(5.seconds)
@@ -251,6 +255,9 @@ proc main() {.async.} =
         echo "Waiting 15 seconds..."
         await sleepAsync(15.seconds)
 
+
+  await sleepAsync(2.seconds)
+  
   echo "Mesh size: ", gossipSub.mesh.getOrDefault("test").len
 
 
