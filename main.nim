@@ -32,7 +32,7 @@ proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
     if isMix:
       discard initializeMixNodes(1, port)
 
-      let writeNodeRes = writeMixNodeInfoToFile(mixNodes[0], id, filePath)
+      let writeNodeRes = writeMixNodeInfoToFile(mixNodes[0], id, filePath / fmt"nodeInfo")
       if writeNodeRes.isErr:
         error "Failed to write mix info to file", nodeId = id
         return
@@ -41,9 +41,9 @@ proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
         error "Get mix pub info by index error", err = error
         return
 
-      let writePubInfoRes = writePubInfoToFile(nodePubInfo, id, filePath)
-      if writePubInfoRes.isErr:
-        error "Failed to write pub info to file", nodeId = id
+      let writeMixPubInfoRes = writeMixPubInfoToFile(nodePubInfo, id, filePath / fmt"pubInfo")
+      if writeMixPubInfoRes.isErr:
+        error "Failed to write mix pub info to file", nodeId = id
         return
 
       let mixNodeInfo = getMixNodeInfo(mixNodes[0])
@@ -59,6 +59,11 @@ proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
     let
       nodeInfo = initNodeInfo(multiAddrStr, libp2pPubKey, libp2pPrivKey)
       pubInfo = initPubInfo(multiAddrStr, libp2pPubKey)
+
+    let writePubInfoRes = writePubInfoToFile(pubInfo, id, filePath / fmt"libp2pPubInfo")
+    if writePubInfoRes.isErr:
+      error "Failed to write pub info to file", nodeId = id
+      return
 
     let multiAddrParts = multiAddrStr.split("/p2p/")
     let multiAddr = MultiAddress.init(multiAddrParts[0]).valueOr:
@@ -123,7 +128,6 @@ proc main() {.async.} =
   if mixPoolSize > mixCount:
     error "Mix pool size is greater than total mix count"
     return
-
 
   let
     myport = 5000 + parseInt(getEnv("PEERNUMBER"))
