@@ -136,7 +136,7 @@ proc main() {.async.} =
   var allNodes: seq[seq[byte]]
   let f = open("nodes.bin", fmRead)
   defer: f.close()
-  var buf: array[idLen, byte]
+  var buf: array[uidLen, byte]
   while true:
     let n = f.readBuffer(addr buf[0], buf.len)
     if n == 0: break  # EOF
@@ -153,7 +153,7 @@ proc main() {.async.} =
 
   let
     myport = parseInt(getEnv("PORT", "5000"))
-    switch = createSwitch(myIndex, myport, isMix, filePath)
+    switch = createSwitch(myId, myport, isMix, filePath)
 
   await sleepAsync(10.seconds)
 
