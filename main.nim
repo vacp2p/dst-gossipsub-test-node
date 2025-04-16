@@ -1,7 +1,8 @@
 import chronos, chronicles, hashes, math, sequtils, strutils, tables, os
+import nimcrypto/sysrand
 import metrics, metrics/chronos_httpserver
 import stew/[byteutils, endians2]
-import std/[enumerate, options, strformat, sysrand, os, sequtils, dirs, parseutils, random]
+import std/[enumerate, options, strformat, sysrand, os, sequtils, dirs, parseutils, random, posix, algorithm]
 import node
 import json
 import mix/[entry_connection, entry_connection_callbacks, mix_node, mix_protocol, protocol, utils]
@@ -27,8 +28,6 @@ proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
       libp2pPubKey: SkPublicKey
       libp2pPrivKey: SkPrivateKey
 
-    let idBytes = uint32ToBytes(uint32(id))
-
     if isMix:
       discard initializeMixNodes(1, port)
 
@@ -38,10 +37,10 @@ proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
         return
 
       let nodePubInfo = getMixPubInfoByIndex(0).valueOr:
-        error "Get mix pub info by index error", err = error
+        error "Get mix pub info by index error", err = error, nodeId = id
         return
 
-      let writePubInfoRes = writePubInfoToFile(nodePubInfo, id, filePath)
+      let writePubInfoRes = writeMixPubInfoToFile(nodePubInfo, id, filePath)
       if writePubInfoRes.isErr:
         error "Failed to write pub info to file", nodeId = id
         return
@@ -102,32 +101,59 @@ proc startMetricsServer(
   info "Metrics HTTP server started", serverIp = $serverIp, serverPort = $serverPort
   ok(metricsServerRes.value)
 
+const uidLen = 32
+
 proc main() {.async.} =
   randomize() 
 
   let
     hostname = getHostname()
-    myId = parseInt(getEnv("PEERNUMBER"))
     msg_rate = parseInt(getEnv("MSGRATE"))
     msg_size = parseInt(getEnv("MSGSIZE"))
     publisherCount = parseInt(getEnv("PUBLISHERS"))
-    isPublisher = myId <= publisherCount
-    isMix = isPublisher # Publishers will be the mix nodes for now
     mixCount = publisherCount # Publishers will be the mix nodes for now
     connectTo = parseInt(getEnv("CONNECTTO"))
     mixPoolSize = parseInt(getEnv("MIXPOOLSIZE"))
-    filePath = getEnv("FILEPATH", ".")
+    filePath = getEnv("FILEPATH", "./")
     rng = libp2p.newRng()
 
   echo "Hostname: ", hostname
+
   if mixPoolSize > mixCount:
     error "Mix pool size is greater than total mix count"
     return
 
+  var uid = newSeq[byte](uidLen)
+  discard randomBytes(uid[0].addr, uid.len)
+
+  # Appending random uid to node list
+  let fd = open(filePath / "nodes.bin", O_WRONLY or O_APPEND or O_CREAT, S_IRUSR or S_IWUSR)
+  discard write(fd, cast[pointer](uid[0].addr), uid.len)
+  discard close(fd)
+
+  await sleepAsync(5.seconds)
+
+  var allNodes: seq[seq[byte]]
+  let f = open("nodes.bin", fmRead)
+  defer: f.close()
+  var buf: array[idLen, byte]
+  while true:
+    let n = f.readBuffer(addr buf[0], buf.len)
+    if n == 0: break  # EOF
+    allNodes.add @buf[0..<n]
+
+  allNodes.sort()
+ 
+  let myId = allNodes.find(uid)
+
+  echo "ID: ", myId
+
+  let isPublisher = myId < publisherCount # [0..<publisherCount] contains all the publishers
+  let isMix = isPublisher # Publishers will be the mix nodes for now
 
   let
-    myport = 5000 + parseInt(getEnv("PEERNUMBER"))
-    switch = createSwitch(myId, myport, isMix, filePath)
+    myport = parseInt(getEnv("PORT", "5000"))
+    switch = createSwitch(myIndex, myport, isMix, filePath)
 
   await sleepAsync(10.seconds)
 
@@ -219,9 +245,10 @@ proc main() {.async.} =
   await switch.start()
 
   echo "Listening on ", switch.peerInfo.addrs
-  echo myId, ", ", isPublisher, ", ", switch.peerInfo.peerId
+
   echo "Waiting 15 seconds for node building..."
-  await sleepAsync(15.seconds)
+
+  await sleepAsync(20.seconds)
 
   var connected = 0
   var addrs: seq[MultiAddress]
@@ -260,15 +287,10 @@ proc main() {.async.} =
 
   echo "Mesh size: ", gossipSub.mesh.getOrDefault("test").len
 
-
-  var turnToPublish: int
-  if parseInt(getHostname()[4 ..^ 1], turnToPublish) == 0:
-    turnToPublish = rand(1..1000)  # Just a placeholder to test locally
-
-  echo "Publishing turn is: ", turnToPublish
+  echo "Publishing turn is: ", myId
   for msg in 0 ..< 10000: #client.param(int, "message_count"):
     await sleepAsync(msg_rate)
-    if msg mod publisherCount == turnToPublish:
+    if msg mod publisherCount == myId:
       echo "Sending message at: ", times.getTime()
       let
         now = getTime()
