@@ -1,4 +1,5 @@
-import strformat
+import strformat, os
+import std/streams
 import mix/[config, utils]
 import libp2p/[crypto/crypto, crypto/secp, multiaddress, peerid]
 
@@ -81,6 +82,57 @@ proc deserializePubInfo*(data: openArray[byte]): Result[PubInfo, string] =
     return err("Failed to initialize libp2p public key: ")
 
   ok(PubInfo(multiAddr: multiAddr, libp2pPubKey: libp2pPubKey))
+
+proc writePubInfoToFile*(
+    node: PubInfo, index: int, pubInfoFolderPath: string = "./libp2pPubInfo"
+): Result[void, string] =
+  if not dirExists(pubInfoFolderPath):
+    createDir(pubInfoFolderPath)
+  let filename = pubInfoFolderPath / fmt"node_{index}"
+  var file = newFileStream(filename, fmWrite)
+  if file == nil:
+    return err("Failed to create file stream for " & filename)
+  defer:
+    file.close()
+
+  let serializedData = serializePubInfo(node).valueOr:
+    return err("Failed to serialize pub info: " & error)
+
+  file.writeData(addr serializedData[0], serializedData.len)
+  return ok()
+
+proc readPubInfoFromFile*(
+    index: int, pubInfoFolderPath: string = "./libp2pPubInfo"
+): Result[PubInfo, string] =
+  try:
+    let filename = pubInfoFolderPath / fmt"node_{index}"
+    if not fileExists(filename):
+      return err("File does not exist")
+    var file = newFileStream(filename, fmRead)
+    if file == nil:
+      return err(
+        "Failed to open file: " & filename &
+          ". Check permissions or if the path is correct."
+      )
+    defer:
+      file.close()
+    let data = file.readAll()
+    if data.len != PubInfoSize:
+      return err(
+        "Invalid data size for NodeInfo: expected " & $NodeInfoSize & " bytes, but got " &
+          $(data.len) & " bytes."
+      )
+    let dPubInfo = deserializePubInfo(cast[seq[byte]](data)).valueOr:
+      return err("Pub info deserialize error: " & error)
+    return ok(dPubInfo)
+  except IOError as e:
+    return err("File read error: " & $e.msg)
+  except OSError as e:
+    return err("OS error: " & $e.msg)
+
+proc deletePubInfoFolder*(pubInfoFolderPath: string = "./libp2pPubInfo") =
+  if dirExists(pubInfoFolderPath):
+    removeDir(pubInfoFolderPath)
 
 proc getPubInfoByIndex*(index: int): Result[PubInfo, string] =
   if index < 0 or index >= nodes.len:
