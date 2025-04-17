@@ -134,7 +134,7 @@ proc main() {.async.} =
   await sleepAsync(5.seconds)
 
   var allNodes: seq[seq[byte]]
-  let f = open("nodes.bin", fmRead)
+  let f = open(filepath / "nodes.bin", fmRead)
   defer: f.close()
   var buf: array[uidLen, byte]
   while true:
