@@ -151,7 +151,7 @@ proc generateNodes(count: int, basePort: int = 4242): Result[seq[NodeInfo], stri
       libp2pPubKey = keyPair.pubkey
       pubKeyProto = PublicKey(scheme: Secp256k1, skkey: libp2pPubKey)
       peerId = PeerId.init(pubKeyProto).get()
-      multiAddr = fmt"/ip4/127.0.0.1/tcp/{basePort + i}/p2p/{peerId}"
+      multiAddr = fmt"/ip4/0.0.0.0/tcp/{basePort + i}/p2p/{peerId}"
 
     nodes[i] = NodeInfo(
       multiAddr: multiAddr, libp2pPubKey: libp2pPubKey, libp2pPrivKey: libp2pPrivKey
