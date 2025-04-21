@@ -162,10 +162,6 @@ proc main() {.async.} =
 
   await sleepAsync(10.seconds)
 
-  echo filePath
-  for file in walkDirRec(filePath):
-    echo file
-
   let mixProto = MixProtocol.newMixProtocol(myId, mixCount, switch, filePath).expect("could not instantiate mix")
 
   let mixConn = proc(
@@ -265,7 +261,12 @@ proc main() {.async.} =
     if i == myId:
       continue
 
-    let pubInfo = readMixPubInfoFromFile(i, filePath).expect("should be able to read mix pubinfo")
+    #[echo "i ", i
+    echo "filePath ", filePath / fmt"pubInfo"
+    for file in walkDirRec(filePath / fmt"pubInfo"):
+      echo "file ", file]#
+
+    let pubInfo = readMixPubInfoFromFile(i, filePath / fmt"pubInfo").expect("should be able to read mix pubinfo")
     let (multiAddr, _, _) = getMixPubInfo(pubInfo)
     let ma = MultiAddress.init(multiAddr).expect("should be a multiaddr")
     addrs.add ma
