@@ -2,7 +2,7 @@ import chronicles, chronos, os, strutils
 import std/[strformat]
 import
   mix/[
-    mix_node, mix_protocol, tag_manager,
+    mix_node, mix_protocol, protocol, tag_manager,
   ]
 import libp2p
 import
@@ -42,11 +42,21 @@ proc newMixProtocol*(
   let pubNodeInfo = loadAllButIdPubInfo(id, numNodes, nodeFolderInfoPath / fmt"pubInfo").valueOr:
     return err("Failed to load mix pub info for id " & $id & " - err: " & error)
 
+  var sendHandlerFunc = proc(
+    conn: Connection, proto: ProtocolType
+  ): Future[void] {.async: (raises: [CancelledError]).} =
+    try:
+      await callHandler(switch, conn, proto)
+    except CatchableError as e:
+      error "Error during execution of MixProtocol handler: ", err = e.msg
+    return
+
   let mixProto = T(
     mixNodeInfo: mixNodeInfo,
     pubNodeInfo: pubNodeInfo,
     switch: switch,
     tagManager: initTagManager(),
+    pHandler: sendHandlerFunc,
   )
   mixProto.init()
   return ok(mixProto)
