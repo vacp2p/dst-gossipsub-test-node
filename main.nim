@@ -113,20 +113,20 @@ proc main() {.async.} =
 
   let
     hostname = getHostname()
+    node_count = parseInt(getEnv("NODES"))
     msg_rate = parseInt(getEnv("MSGRATE"))
     msg_size = parseInt(getEnv("MSGSIZE"))
     publisherCount = parseInt(getEnv("PUBLISHERS"))
     mixCount = publisherCount # Publishers will be the mix nodes for now
     connectTo = parseInt(getEnv("CONNECTTO"))
-    mixPoolSize = parseInt(getEnv("MIXPOOLSIZE"))
     filePath = getEnv("FILEPATH", "./")
     rng = libp2p.newRng()
 
-  echo "Hostname: ", hostname
-
-  if mixPoolSize > mixCount:
-    error "Mix pool size is greater than total mix count"
+  if publisherCount > node_count:
+    error "Publisher count is greater than total node count"
     return
+
+  echo "Hostname: ", hostname
 
   var uid = newSeq[byte](uidLen)
   discard randomBytes(uid[0].addr, uid.len)
@@ -153,10 +153,9 @@ proc main() {.async.} =
 
   echo "ID: ", myId
 
-  let isPublisher = myId < publisherCount # [0..<publisherCount] contains all the publishers
-  let isMix = isPublisher # Publishers will be the mix nodes for now
-
   let
+    isPublisher = myId < publisherCount # [0..<publisherCount] contains all the publishers
+    isMix = isPublisher # Publishers will be the mix nodes for now
     myport = parseInt(getEnv("PORT", "5000"))
     switch = createSwitch(myId, myport, isMix, filePath)
 
@@ -257,17 +256,12 @@ proc main() {.async.} =
   var connected = 0
   var addrs: seq[MultiAddress]
 
-  for i in 0..<mixCount:
+  for i in 0..<node_count:
     if i == myId:
       continue
 
-    #[echo "i ", i
-    echo "filePath ", filePath / fmt"pubInfo"
-    for file in walkDirRec(filePath / fmt"pubInfo"):
-      echo "file ", file]#
-
-    let pubInfo = readMixPubInfoFromFile(i, filePath / fmt"pubInfo").expect("should be able to read mix pubinfo")
-    let (multiAddr, _, _) = getMixPubInfo(pubInfo)
+    let pubInfo = readPubInfoFromFile(i, filePath / fmt"libp2pPubInfo").expect("should be able to read pubinfo")
+    let (multiAddr, _) = getPubInfo(pubInfo)
     let ma = MultiAddress.init(multiAddr).expect("should be a multiaddr")
     addrs.add ma
  
