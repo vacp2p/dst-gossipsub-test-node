@@ -51,12 +51,13 @@ proc newMixProtocol*(
       error "Error during execution of MixProtocol handler: ", err = e.msg
     return
 
-  let mixProto = T(
-    mixNodeInfo: mixNodeInfo,
-    pubNodeInfo: pubNodeInfo,
-    switch: switch,
-    tagManager: initTagManager(),
-    pHandler: sendHandlerFunc,
-  )
-  mixProto.init()
+  let mixProto = createMixProtocol(
+    mixNodeInfo,
+    pubNodeInfo,
+    switch,
+    initTagManager(),
+    sendHandlerFunc,
+  ).valueOr:
+    return err("Failed to create MixProtocol: " & error)
+
   return ok(mixProto)
