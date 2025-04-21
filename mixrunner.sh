@@ -18,11 +18,11 @@ for i in $(seq 1 "$N"); do
   docker run --rm \
     -d \
     -v "$DATADIR":/data \
+    -e NODES="$N" \
     -e MSGRATE=10 \
     -e MSGSIZE=10 \
-    -e PUBLISHERS="$N" \
-    -e CONNECTTO=5 \
-    -e MIXPOOLSIZE="$N" \
+    -e PUBLISHERS=5 \
+    -e CONNECTTO=4 \
     --entrypoint /node/main \
     mixrunner
 done
