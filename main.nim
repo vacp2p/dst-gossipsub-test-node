@@ -3,7 +3,7 @@ import nimcrypto/sysrand
 import metrics, metrics/chronos_httpserver
 import stew/[byteutils, endians2]
 import std/[enumerate, options, strformat, sysrand, os, sequtils, dirs, parseutils, random, posix, algorithm]
-import node
+import mixprotocol, node
 import json
 import mix/[entry_connection, entry_connection_callbacks, mix_node, mix_protocol, protocol, utils]
 import
@@ -31,18 +31,18 @@ proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
     if isMix:
       discard initializeMixNodes(1, port)
 
-      let writeNodeRes = writeMixNodeInfoToFile(mixNodes[0], id, filePath)
+      let writeNodeRes = writeMixNodeInfoToFile(mixNodes[0], id, filePath / fmt"nodeInfo")
       if writeNodeRes.isErr:
         error "Failed to write mix info to file", nodeId = id
         return
 
       let nodePubInfo = getMixPubInfoByIndex(0).valueOr:
-        error "Get mix pub info by index error", err = error, nodeId = id
+        error "Get mix pub info by index error", err = error
         return
 
-      let writePubInfoRes = writeMixPubInfoToFile(nodePubInfo, id, filePath)
-      if writePubInfoRes.isErr:
-        error "Failed to write pub info to file", nodeId = id
+      let writeMixPubInfoRes = writeMixPubInfoToFile(nodePubInfo, id, filePath / fmt"pubInfo")
+      if writeMixPubInfoRes.isErr:
+        error "Failed to write mix pub info to file", nodeId = id
         return
 
       let mixNodeInfo = getMixNodeInfo(mixNodes[0])
@@ -58,6 +58,11 @@ proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
     let
       nodeInfo = initNodeInfo(multiAddrStr, libp2pPubKey, libp2pPrivKey)
       pubInfo = initPubInfo(multiAddrStr, libp2pPubKey)
+
+    let writePubInfoRes = writePubInfoToFile(pubInfo, id, filePath / fmt"libp2pPubInfo")
+    if writePubInfoRes.isErr:
+      error "Failed to write pub info to file", nodeId = id
+      return
 
     let multiAddrParts = multiAddrStr.split("/p2p/")
     let multiAddr = MultiAddress.init(multiAddrParts[0]).valueOr:
@@ -157,8 +162,11 @@ proc main() {.async.} =
 
   await sleepAsync(10.seconds)
 
+  echo filePath
+  for file in walkDirRec(filePath):
+    echo file
 
-  let mixProto = MixProtocol.new(myId, mixCount, switch, filePath).expect("could not instantiate mix")
+  let mixProto = MixProtocol.newMixProtocol(myId, mixCount, switch, filePath).expect("could not instantiate mix")
 
   let mixConn = proc(
         destAddr: Option[MultiAddress], destPeerId: PeerId, codec: string
