@@ -2,10 +2,18 @@ import chronos, chronicles, hashes, math, sequtils, strutils, tables, os
 import nimcrypto/sysrand
 import metrics, metrics/chronos_httpserver
 import stew/[byteutils, endians2]
-import std/[enumerate, options, strformat, sysrand, os, sequtils, dirs, parseutils, random, posix, algorithm]
+import
+  std/[
+    enumerate, options, strformat, sysrand, os, sequtils, dirs, parseutils, random,
+    posix, algorithm,
+  ]
 import mixprotocol, node
 import json
-import mix/[entry_connection, entry_connection_callbacks, mix_node, mix_protocol, protocol, utils]
+import
+  mix/[
+    entry_connection, entry_connection_callbacks, mix_node, mix_protocol, protocol,
+    utils,
+  ]
 import
   libp2p,
   libp2p/[
@@ -31,7 +39,8 @@ proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
     if isMix:
       discard initializeMixNodes(1, port)
 
-      let writeNodeRes = writeMixNodeInfoToFile(mixNodes[0], id, filePath / fmt"nodeInfo")
+      let writeNodeRes =
+        writeMixNodeInfoToFile(mixNodes[0], id, filePath / fmt"nodeInfo")
       if writeNodeRes.isErr:
         error "Failed to write mix info to file", nodeId = id
         return
@@ -40,7 +49,8 @@ proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
         error "Get mix pub info by index error", err = error
         return
 
-      let writeMixPubInfoRes = writeMixPubInfoToFile(nodePubInfo, id, filePath / fmt"pubInfo")
+      let writeMixPubInfoRes =
+        writeMixPubInfoToFile(nodePubInfo, id, filePath / fmt"pubInfo")
       if writeMixPubInfoRes.isErr:
         error "Failed to write mix pub info to file", nodeId = id
         return
@@ -49,7 +59,6 @@ proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
       multiAddrStr = mixNodeInfo[0]
       libp2pPubKey = mixNodeInfo[3]
       libp2pPrivKey = mixNodeInfo[4]
-
     else:
       discard initializeNodes(1, port)
 
@@ -109,7 +118,7 @@ proc startMetricsServer(
 const uidLen = 32
 
 proc main() {.async.} =
-  randomize() 
+  randomize()
 
   let
     hostname = getHostname()
@@ -126,13 +135,14 @@ proc main() {.async.} =
     error "Publisher count is greater than total node count"
     return
 
-  echo "Hostname: ", hostname
+  info "Hostname", host = hostname
 
   var uid = newSeq[byte](uidLen)
   discard randomBytes(uid[0].addr, uid.len)
 
   # Appending random uid to node list
-  let fd = open(filePath / "nodes.bin", O_WRONLY or O_APPEND or O_CREAT, S_IRUSR or S_IWUSR)
+  let fd =
+    open(filePath / "nodes.bin", O_WRONLY or O_APPEND or O_CREAT, S_IRUSR or S_IWUSR)
   discard write(fd, cast[pointer](uid[0].addr), uid.len)
   discard close(fd)
 
@@ -140,51 +150,58 @@ proc main() {.async.} =
 
   var allNodes: seq[seq[byte]]
   let f = open(filepath / "nodes.bin", fmRead)
-  defer: f.close()
+  defer:
+    f.close()
   var buf: array[uidLen, byte]
   while true:
     let n = f.readBuffer(addr buf[0], buf.len)
-    if n == 0: break  # EOF
-    allNodes.add @buf[0..<n]
+    if n == 0:
+      break # EOF
+    allNodes.add @buf[0 ..< n]
 
   allNodes.sort()
- 
+
   let myId = allNodes.find(uid)
 
-  echo "ID: ", myId
+  info "ID", id = myId
 
   let
-    isPublisher = myId < publisherCount # [0..<publisherCount] contains all the publishers
+    isPublisher = myId < publisherCount
+      # [0..<publisherCount] contains all the publishers
     isMix = isPublisher # Publishers will be the mix nodes for now
     myport = parseInt(getEnv("PORT", "5000"))
     switch = createSwitch(myId, myport, isMix, filePath)
 
   await sleepAsync(10.seconds)
 
-  let mixProto = MixProtocol.newMixProtocol(myId, mixCount, switch, filePath).expect("could not instantiate mix")
+  var gossipSub: GossipSub
 
-  let mixConn = proc(
+  if isMix:
+    let mixProto = MixProtocol.newMixProtocol(myId, mixCount, switch, filePath).expect(
+        "could not instantiate mix"
+      )
+
+    let mixConn = proc(
         destAddr: Option[MultiAddress], destPeerId: PeerId, codec: string
     ): Connection {.gcsafe, raises: [].} =
       try:
         return mixProto.createMixEntryConnection(destAddr, destPeerId, codec)
       except CatchableError as e:
-        error "Error during execution of MixEntryConnection callback: ", err = e.msg
+        error "Error during execution of MixEntryConnection callback", err = e.msg
         return nil
 
-  let mixPeerSelect = proc(
-      allPeers: HashSet[PubSubPeer],
-      directPeers: HashSet[PubSubPeer],
-      meshPeers: HashSet[PubSubPeer],
-      fanoutPeers: HashSet[PubSubPeer],
+    let mixPeerSelect = proc(
+        allPeers: HashSet[PubSubPeer],
+        directPeers: HashSet[PubSubPeer],
+        meshPeers: HashSet[PubSubPeer],
+        fanoutPeers: HashSet[PubSubPeer],
     ): HashSet[PubSubPeer] {.gcsafe, raises: [].} =
       try:
         return mixPeerSelection(allPeers, directPeers, meshPeers, fanoutPeers)
       except CatchableError as e:
-        error "Error during execution of MixPeerSelection callback: ", err = e.msg
+        error "Error during execution of MixPeerSelection callback", err = e.msg
         return initHashSet[PubSubPeer]()
 
-  let
     gossipSub = GossipSub.init(
       switch = switch,
       triggerSelf = true,
@@ -198,12 +215,18 @@ proc main() {.async.} =
       ),
     )
 
-  var
-    curPoolSize = 0
-    pool: seq[string] = @[]
+    switch.mount(mixProto)
+  else:
+    gossipSub = GossipSub.init(
+      switch = switch,
+      triggerSelf = true,
+      msgIdProvider = msgIdProvider,
+      verifySignature = false,
+      anonymize = true,
+    )
 
   # Metrics
-  echo "Starting metrics HTTP server"
+  info "Starting metrics HTTP server"
   let metricsServer = startMetricsServer(parseIpAddress("0.0.0.0"), Port(8008))
 
   gossipSub.parameters.floodPublish = true
@@ -235,7 +258,7 @@ proc main() {.async.} =
       sentNanosecs = nanoseconds(sentMoment - seconds(sentMoment.seconds))
       sentDate = initTime(sentMoment.seconds, sentNanosecs)
       diff = getTime() - sentDate
-    echo sentUint, " milliseconds: ", diff.inMilliseconds()
+    info "Sent", msgId = sentUint, milliSec = diff.inMilliseconds()
 
   proc messageValidator(
       topic: string, msg: Message
@@ -247,24 +270,26 @@ proc main() {.async.} =
   switch.mount(gossipSub)
   await switch.start()
 
-  echo "Listening on ", switch.peerInfo.addrs
+  info "Listening", addrs = switch.peerInfo.addrs
 
-  echo "Waiting 15 seconds for node building..."
+  info "Waiting 20 seconds for node building..."
 
   await sleepAsync(20.seconds)
 
   var connected = 0
   var addrs: seq[MultiAddress]
 
-  for i in 0..<node_count:
+  for i in 0 ..< node_count:
     if i == myId:
       continue
 
-    let pubInfo = readPubInfoFromFile(i, filePath / fmt"libp2pPubInfo").expect("should be able to read pubinfo")
+    let pubInfo = readPubInfoFromFile(i, filePath / fmt"libp2pPubInfo").expect(
+        "should be able to read pubinfo"
+      )
     let (multiAddr, _) = getPubInfo(pubInfo)
     let ma = MultiAddress.init(multiAddr).expect("should be a multiaddr")
     addrs.add ma
- 
+
   rng.shuffle(addrs)
   var index = 0
   while true:
@@ -272,29 +297,27 @@ proc main() {.async.} =
       break
     while true:
       try:
-
-        echo "Trying to connect to ", addrs[index]
+        info "Trying to connect", addrs = addrs[index]
         let peerId =
           await switch.connect(addrs[index], allowUnknownPeerId = true).wait(5.seconds)
         connected.inc()
         index.inc()
-        echo "Connected!"
+        info "Connected!"
         break
       except CatchableError as exc:
-        echo "Failed to dial", exc.msg
-        echo "Waiting 15 seconds..."
+        error "Failed to dial", err = exc.msg
+        info "Waiting 15 seconds..."
         await sleepAsync(15.seconds)
-
 
   await sleepAsync(2.seconds)
 
-  echo "Mesh size: ", gossipSub.mesh.getOrDefault("test").len
+  info "Mesh size", meshSize = gossipSub.mesh.getOrDefault("test").len
 
-  echo "Publishing turn is: ", myId
+  info "Publishing turn", id = myId
   for msg in 0 ..< 10000: #client.param(int, "message_count"):
     await sleepAsync(msg_rate)
     if msg mod publisherCount == myId:
-      echo "Sending message at: ", times.getTime()
+      info "Sending message", time = times.getTime()
       let
         now = getTime()
         nowInt = seconds(now.toUnix()) + nanoseconds(times.nanosecond(now))
