@@ -7,7 +7,7 @@ import
     enumerate, options, strformat, sysrand, os, sequtils, dirs, parseutils, random,
     posix, algorithm,
   ]
-import mixprotocol, node
+import node
 import json
 import
   mix/[
@@ -39,22 +39,6 @@ proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
     if isMix:
       discard initializeMixNodes(1, port)
 
-      let writeNodeRes =
-        writeMixNodeInfoToFile(mixNodes[0], id, filePath / fmt"nodeInfo")
-      if writeNodeRes.isErr:
-        error "Failed to write mix info to file", nodeId = id
-        return
-
-      let nodePubInfo = getMixPubInfoByIndex(0).valueOr:
-        error "Get mix pub info by index error", err = error
-        return
-
-      let writeMixPubInfoRes =
-        writeMixPubInfoToFile(nodePubInfo, id, filePath / fmt"pubInfo")
-      if writeMixPubInfoRes.isErr:
-        error "Failed to write mix pub info to file", nodeId = id
-        return
-
       let mixNodeInfo = getMixNodeInfo(mixNodes[0])
       multiAddrStr = mixNodeInfo[0]
       libp2pPubKey = mixNodeInfo[3]
@@ -63,15 +47,6 @@ proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
       discard initializeNodes(1, port)
 
       (multiAddrStr, libp2pPubKey, libp2pPrivKey) = getNodeInfo(nodes[0])
-
-    let
-      nodeInfo = initNodeInfo(multiAddrStr, libp2pPubKey, libp2pPrivKey)
-      pubInfo = initPubInfo(multiAddrStr, libp2pPubKey)
-
-    let writePubInfoRes = writePubInfoToFile(pubInfo, id, filePath / fmt"libp2pPubInfo")
-    if writePubInfoRes.isErr:
-      error "Failed to write pub info to file", nodeId = id
-      return
 
     let multiAddrParts = multiAddrStr.split("/p2p/")
     let multiAddr = MultiAddress.init(multiAddrParts[0]).valueOr:
@@ -90,6 +65,41 @@ proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
 
     if switch.isNil:
       warn "Failed to set up node", nodeId = id
+      return
+
+    let addresses = getInterfaces().filterIt(it.name == "eth0").mapIt(it.addresses)
+    if addresses.len < 1 or addresses[0].len < 1:
+      error "Can't find local ip!"
+      return
+
+    let
+      externalAddr = ($addresses[0][0].host).split(":")[0]
+      peerId = switch.peerInfo.peerId
+      externalMultiAddr = fmt"/ip4/{externalAddr}/tcp/{port}/p2p/{peerId}"
+
+    if isMix:
+      discard initMixMultiAddrByIndex(0, externalMultiAddr)
+      let writeNodeRes =
+        writeMixNodeInfoToFile(mixNodes[0], id, filePath / fmt"nodeInfo")
+      if writeNodeRes.isErr:
+        error "Failed to write mix info to file", nodeId = id, err = writeNodeRes.error
+        return
+
+      let nodePubInfo = getMixPubInfoByIndex(0).valueOr:
+        error "Get mix pub info by index error", err = error
+        return
+
+      let writeMixPubInfoRes =
+        writeMixPubInfoToFile(nodePubInfo, id, filePath / fmt"pubInfo")
+      if writeMixPubInfoRes.isErr:
+        error "Failed to write mix pub info to file", nodeId = id
+        return
+
+    let pubInfo = initPubInfo(externalMultiAddr, libp2pPubKey)
+
+    let writePubInfoRes = writePubInfoToFile(pubInfo, id, filePath / fmt"libp2pPubInfo")
+    if writePubInfoRes.isErr:
+      error "Failed to write pub info to file", nodeId = id
       return
 
     return switch
@@ -177,7 +187,7 @@ proc main() {.async.} =
   var gossipSub: GossipSub
 
   if isMix:
-    let mixProto = MixProtocol.newMixProtocol(myId, mixCount, switch, filePath).expect(
+    let mixProto = MixProtocol.new(myId, mixCount, switch, filePath).expect(
         "could not instantiate mix"
       )
 
@@ -322,6 +332,6 @@ proc main() {.async.} =
         now = getTime()
         nowInt = seconds(now.toUnix()) + nanoseconds(times.nanosecond(now))
       var nowBytes = @(toBytesLE(uint64(nowInt.nanoseconds))) & newSeq[byte](msg_size)
-      doAssert((await gossipSub.publish("test", nowBytes)) > 0)
+      doAssert((await gossipSub.publish("test", nowBytes, useCustomConn = true)) > 0)
 
 waitFor(main())
