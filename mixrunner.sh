@@ -14,9 +14,11 @@ if [[ "$(ls -A "$DATADIR")" ]]; then
   exit 1
 fi
 
-for i in $(seq 1 "$N"); do
+for i in $(seq 0 $((N-1))); do
   docker run --rm \
     -d \
+    --name node-$i \
+    --hostname node-$i \
     -v "$DATADIR":/data \
     -e NODES="$N" \
     -e MSGRATE=10 \
