@@ -146,33 +146,7 @@ proc main() {.async.} =
     return
 
   info "Hostname", host = hostname
-
-  var uid = newSeq[byte](uidLen)
-  discard randomBytes(uid[0].addr, uid.len)
-
-  # Appending random uid to node list
-  let fd =
-    open(filePath / "nodes.bin", O_WRONLY or O_APPEND or O_CREAT, S_IRUSR or S_IWUSR)
-  discard write(fd, cast[pointer](uid[0].addr), uid.len)
-  discard close(fd)
-
-  await sleepAsync(5.seconds)
-
-  var allNodes: seq[seq[byte]]
-  let f = open(filepath / "nodes.bin", fmRead)
-  defer:
-    f.close()
-  var buf: array[uidLen, byte]
-  while true:
-    let n = f.readBuffer(addr buf[0], buf.len)
-    if n == 0:
-      break # EOF
-    allNodes.add @buf[0 ..< n]
-
-  allNodes.sort()
-
-  let myId = allNodes.find(uid)
-
+  let myId = getHostname().split('-')[^1].parseInt()
   info "ID", id = myId
 
   let
