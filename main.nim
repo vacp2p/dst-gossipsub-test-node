@@ -232,17 +232,20 @@ proc main() {.async.} =
   )
 
   proc messageHandler(topic: string, data: seq[byte]) {.async.} =
-    let sentUint = uint64.fromBytesLE(data)
-    # warm-up
-    if sentUint < 1000000:
+    if data.len < 16:
+      warn "Message too short"
       return
 
     let
-      sentMoment = nanoseconds(int64(uint64.fromBytesLE(data)))
+      timestampNs = uint64.fromBytesLE(data[0 ..< 8])
+      msgId = uint64.fromBytesLE(data[8 ..< 16])
+      sentMoment = nanoseconds(int64(timestampNs))
       sentNanosecs = nanoseconds(sentMoment - seconds(sentMoment.seconds))
       sentDate = initTime(sentMoment.seconds, sentNanosecs)
-      diff = getTime() - sentDate
-    info "Sent", msgId = sentUint, milliSec = diff.inMilliseconds()
+      recvTime = getTime()
+      delay = recvTime - sentDate
+
+    info "Received message", msgId = msgId, sentAt = timestampNs, delayMs = delay.inMilliseconds()
 
   proc messageValidator(
       topic: string, msg: Message
