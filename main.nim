@@ -302,10 +302,17 @@ proc main() {.async.} =
     await sleepAsync(msg_rate)
     if msg mod publisherCount == myId:
       info "Sending message", time = times.getTime()
-      let
-        now = getTime()
-        nowInt = seconds(now.toUnix()) + nanoseconds(times.nanosecond(now))
-      var nowBytes = @(toBytesLE(uint64(nowInt.nanoseconds))) & newSeq[byte](msg_size)
-      doAssert((await gossipSub.publish("test", nowBytes, useCustomConn = true)) > 0)
+      let now = getTime()
+      let timestampNs = now.toUnix().int64 * 1_000_000_000 + times.nanosecond(now).int64
+      let msgId = uint64(msg)
+
+      var payload: seq[byte]
+      payload.add(toBytesLE(uint64(timestampNs)))
+      payload.add(toBytesLE(msgId))
+      payload.add(newSeq[byte](msg_size - 16))  # Fill the rest with padding
+
+      info "Publishing message", msgId = msgId, timestamp = timestampNs
+
+      doAssert((await gossipSub.publish("test", payload, useCustomConn = true)) > 0)
 
 waitFor(main())
