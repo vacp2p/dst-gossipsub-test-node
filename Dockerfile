@@ -38,10 +38,12 @@ RUN apt-get update && apt install -y git build-essential bash ca-certificates li
 # Configure git and install dependencies
 RUN git config --global http.sslVerify false
 
-# Copy source code
-COPY . .
+# Copy only files needed to install Nimble deps (optimizes layer caching)
+COPY test_node.nimble .
+RUN nimble install -y --depsOnly.
 
-RUN nimble install
+# Copy full source AFTER deps are cached
+COPY . .
 
 # Compile the Nim application
 RUN nimble c -d:chronicles_colors=None --threads:on -d:metrics -d:libp2p_network_protocols_metrics  -d:release main
