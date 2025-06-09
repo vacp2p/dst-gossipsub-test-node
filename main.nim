@@ -20,7 +20,7 @@ import
     crypto/secp,
     multiaddress,
     builders,
-    muxers/mplex/lpchannel,
+    muxers/yamux/yamux,
     protocols/pubsub/gossipsub,
     protocols/pubsub/pubsubpeer,
     protocols/pubsub/rpc/messages,
@@ -58,7 +58,7 @@ proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
       .withPrivateKey(PrivateKey(scheme: Secp256k1, skkey: libp2pPrivKey))
       .withAddress(multiAddr)
       .withRng(crypto.newRng())
-      .withMplex()
+      .withYamux()
       .withTcpTransport()
       .withNoise()
       .build()
@@ -194,8 +194,7 @@ proc main() {.async.} =
       anonymize = true,
       customConnCallbacks = some(
         CustomConnectionCallbacks(
-          customConnCreationCB: mixConn,
-          customPeerSelectionCB: mixPeerSelect
+          customConnCreationCB: mixConn, customPeerSelectionCB: mixPeerSelect
         )
       ),
     )
@@ -246,7 +245,8 @@ proc main() {.async.} =
       recvTime = getTime()
       delay = recvTime - sentDate
 
-    info "Received message", msgId = msgId, sentAt = timestampNs, delayMs = delay.inMilliseconds()
+    info "Received message",
+      msgId = msgId, sentAt = timestampNs, delayMs = delay.inMilliseconds()
 
   proc messageValidator(
       topic: string, msg: Message
@@ -313,7 +313,7 @@ proc main() {.async.} =
       var payload: seq[byte]
       payload.add(toBytesLE(uint64(timestampNs)))
       payload.add(toBytesLE(msgId))
-      payload.add(newSeq[byte](msg_size - 16))  # Fill the rest with padding
+      payload.add(newSeq[byte](msg_size - 16)) # Fill the rest with padding
 
       info "Publishing message", msgId = msgId, timestamp = timestampNs
 
