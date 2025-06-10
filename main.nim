@@ -133,6 +133,7 @@ proc main() {.async.} =
   let
     hostname = getHostname()
     node_count = parseInt(getEnv("NODES"))
+    messages = parseInt(getEnv("MESSAGES"))
     msg_rate = parseInt(getEnv("MSGRATE"))
     msg_size = parseInt(getEnv("MSGSIZE"))
     publisherCount = parseInt(getEnv("PUBLISHERS"))
