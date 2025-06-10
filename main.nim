@@ -258,6 +258,7 @@ proc main() {.async.} =
   switch.mount(gossipSub)
   await switch.start()
 
+  info "PeerId ", peerid = switch.peerInfo.peerId
   info "Listening", addrs = switch.peerInfo.addrs
 
   info "Waiting 20 seconds for node building..."
@@ -302,10 +303,10 @@ proc main() {.async.} =
   info "Mesh size", meshSize = gossipSub.mesh.getOrDefault("test").len
 
   info "Publishing turn", id = myId
-  for msg in 0 ..< 10000: #client.param(int, "message_count"):
+  for msg in 0 ..< messages: #client.param(int, "message_count"):
     await sleepAsync(msg_rate)
     if msg mod publisherCount == myId:
-      info "Sending message", time = times.getTime()
+
       let now = getTime()
       let timestampNs = now.toUnix().int64 * 1_000_000_000 + times.nanosecond(now).int64
       let msgId = uint64(msg)
@@ -318,5 +319,6 @@ proc main() {.async.} =
       info "Publishing message", msgId = msgId, timestamp = timestampNs
 
       doAssert((await gossipSub.publish("test", payload, useCustomConn = true)) > 0)
+  await sleepAsync(999999999)
 
 waitFor(main())
