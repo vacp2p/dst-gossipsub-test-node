@@ -137,7 +137,8 @@ proc main() {.async.} =
     msg_rate = parseInt(getEnv("MSGRATE"))
     msg_size = parseInt(getEnv("MSGSIZE"))
     publisherCount = parseInt(getEnv("PUBLISHERS"))
-    mixCount = publisherCount # Publishers will be the mix nodes for now
+    mixCount = node_count
+      # Ensures all nodes run Mix so that any GossipSub peer can act as an exit node
     connectTo = parseInt(getEnv("CONNECTTO"))
     filePath = getEnv("FILEPATH", "./")
     rng = libp2p.newRng()
@@ -152,8 +153,7 @@ proc main() {.async.} =
 
   let
     isPublisher = myId < publisherCount
-      # [0..<publisherCount] contains all the publishers
-    isMix = isPublisher # Publishers will be the mix nodes for now
+    isMix = true # All nodes run Mix
     myport = parseInt(getEnv("PORT", "5000"))
     switch = createSwitch(myId, myport, isMix, filePath)
 
@@ -307,7 +307,6 @@ proc main() {.async.} =
   for msg in 0 ..< messages: #client.param(int, "message_count"):
     await sleepAsync(msg_rate)
     if msg mod publisherCount == myId:
-
       let now = getTime()
       let timestampNs = now.toUnix().int64 * 1_000_000_000 + times.nanosecond(now).int64
       let msgId = uint64(msg)
@@ -319,7 +318,15 @@ proc main() {.async.} =
 
       info "Publishing message", msgId = msgId, timestamp = timestampNs
 
-      doAssert((await gossipSub.publish("test", payload, useCustomConn = true)) > 0)
+      doAssert(
+        (
+          await gossipSub.publish(
+            "test",
+            payload,
+            publishParams = some(PublishParams(skipMCache: true, useCustomConn: true)),
+          )
+        ) > 0
+      )
   await sleepAsync(999999999)
 
 waitFor(main())
