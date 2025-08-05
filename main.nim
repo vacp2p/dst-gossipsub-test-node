@@ -1,26 +1,15 @@
 import chronos, chronicles, hashes, math, sequtils, strutils, tables, os
-import nimcrypto/sysrand
 import metrics, metrics/chronos_httpserver
 import stew/[byteutils, endians2]
-import
-  std/[
-    enumerate, options, strformat, sysrand, os, sequtils, dirs, parseutils, random,
-    posix, algorithm,
-  ]
+import std/[options, strformat, random, posix]
 import node
-import json
-import
-  mix/[
-    entry_connection, entry_connection_callbacks, mix_node, mix_protocol, protocol,
-    utils,
-  ]
+import mix
 import
   libp2p,
   libp2p/[
     crypto/secp,
     multiaddress,
     builders,
-    muxers/yamux/yamux,
     protocols/pubsub/gossipsub,
     protocols/pubsub/pubsubpeer,
     protocols/pubsub/rpc/messages,
@@ -28,6 +17,25 @@ import
   ]
 from times import getTime, toUnix, fromUnix, `-`, initTime, `$`, inMilliseconds
 from nativesockets import getHostname
+
+const D* = 4 # No. of peers to forward to
+
+proc mixPeerSelection*(
+    allPeers: HashSet[PubSubPeer],
+    directPeers: HashSet[PubSubPeer],
+    meshPeers: HashSet[PubSubPeer],
+    fanoutPeers: HashSet[PubSubPeer],
+): HashSet[PubSubPeer] {.gcsafe, raises: [].} =
+  var
+    peers: HashSet[PubSubPeer]
+    allPeersSeq = allPeers.toSeq()
+  let rng = newRng()
+  rng.shuffle(allPeersSeq)
+  for p in allPeersSeq:
+    peers.incl(p)
+    if peers.len >= D:
+      break
+  return peers
 
 proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
   {.gcsafe.}:
@@ -112,20 +120,17 @@ proc startMetricsServer(
 ): Result[MetricsHttpServerRef, string] =
   info "Starting metrics HTTP server", serverIp = $serverIp, serverPort = $serverPort
 
-  let metricsServerRes = MetricsHttpServerRef.new($serverIp, serverPort)
-  if metricsServerRes.isErr():
-    return err("metrics HTTP server start failed: " & $metricsServerRes.error)
+  let server = MetricsHttpServerRef.new($serverIp, serverPort).valueOr:
+    return err("metrics HTTP server start failed: " & $error)
 
-  let server = metricsServerRes.value
   try:
     waitFor server.start()
   except CatchableError:
     return err("metrics HTTP server start failed: " & getCurrentExceptionMsg())
 
   info "Metrics HTTP server started", serverIp = $serverIp, serverPort = $serverPort
-  ok(metricsServerRes.value)
 
-const uidLen = 32
+  ok(server)
 
 proc main() {.async.} =
   randomize()
@@ -170,7 +175,7 @@ proc main() {.async.} =
         destAddr: Option[MultiAddress], destPeerId: PeerId, codec: string
     ): Connection {.gcsafe, raises: [].} =
       try:
-        return mixProto.createMixEntryConnection(destAddr, destPeerId, codec)
+        return mixProto.toConnection(destPeerId, Opt.none(MultiAddress), codec)
       except CatchableError as e:
         error "Error during execution of MixEntryConnection callback", err = e.msg
         return nil
@@ -305,7 +310,7 @@ proc main() {.async.} =
 
   info "Publishing turn", id = myId
   for msg in 0 ..< messages: #client.param(int, "message_count"):
-    await sleepAsync(msg_rate)
+    await sleepAsync(msg_rate.milliseconds)
     if msg mod publisherCount == myId:
       let now = getTime()
       let timestampNs = now.toUnix().int64 * 1_000_000_000 + times.nanosecond(now).int64
@@ -327,6 +332,6 @@ proc main() {.async.} =
           )
         ) > 0
       )
-  await sleepAsync(999999999)
+  await sleepAsync(10.days)
 
 waitFor(main())
