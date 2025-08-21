@@ -7,8 +7,8 @@ description   = "A test node for gossipsub"
 license       = "MIT"
 skipDirs      = @[]
 
-requires "nim >= 1.6.0",
-         "https://github.com/AkshayaMani/nim-libp2p#gossipsub-custom-conn",
-         "https://github.com/vacp2p/mix#poc/gossipsub",
+requires "nim >= 2.0.8",
+         "https://github.com/vacp2p/nim-libp2p#tmp/mix-gossipsub-logging",
+         "https://github.com/vacp2p/mix#tmp/benchmark-logging",
          "chronos",
          "ggplotnim"

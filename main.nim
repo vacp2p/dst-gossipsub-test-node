@@ -20,7 +20,7 @@ import
     crypto/secp,
     multiaddress,
     builders,
-    muxers/mplex/lpchannel,
+    muxers/yamux/yamux,
     protocols/pubsub/gossipsub,
     protocols/pubsub/pubsubpeer,
     protocols/pubsub/rpc/messages,
@@ -58,7 +58,7 @@ proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
       .withPrivateKey(PrivateKey(scheme: Secp256k1, skkey: libp2pPrivKey))
       .withAddress(multiAddr)
       .withRng(crypto.newRng())
-      .withMplex()
+      .withYamux()
       .withTcpTransport()
       .withNoise()
       .build()
@@ -133,10 +133,12 @@ proc main() {.async.} =
   let
     hostname = getHostname()
     node_count = parseInt(getEnv("NODES"))
+    messages = parseInt(getEnv("MESSAGES"))
     msg_rate = parseInt(getEnv("MSGRATE"))
     msg_size = parseInt(getEnv("MSGSIZE"))
     publisherCount = parseInt(getEnv("PUBLISHERS"))
-    mixCount = publisherCount # Publishers will be the mix nodes for now
+    mixCount = node_count
+      # Ensures all nodes run Mix so that any GossipSub peer can act as an exit node
     connectTo = parseInt(getEnv("CONNECTTO"))
     filePath = getEnv("FILEPATH", "./")
     rng = libp2p.newRng()
@@ -146,39 +148,12 @@ proc main() {.async.} =
     return
 
   info "Hostname", host = hostname
-
-  var uid = newSeq[byte](uidLen)
-  discard randomBytes(uid[0].addr, uid.len)
-
-  # Appending random uid to node list
-  let fd =
-    open(filePath / "nodes.bin", O_WRONLY or O_APPEND or O_CREAT, S_IRUSR or S_IWUSR)
-  discard write(fd, cast[pointer](uid[0].addr), uid.len)
-  discard close(fd)
-
-  await sleepAsync(5.seconds)
-
-  var allNodes: seq[seq[byte]]
-  let f = open(filepath / "nodes.bin", fmRead)
-  defer:
-    f.close()
-  var buf: array[uidLen, byte]
-  while true:
-    let n = f.readBuffer(addr buf[0], buf.len)
-    if n == 0:
-      break # EOF
-    allNodes.add @buf[0 ..< n]
-
-  allNodes.sort()
-
-  let myId = allNodes.find(uid)
-
+  let myId = getHostname().split('-')[^1].parseInt()
   info "ID", id = myId
 
   let
     isPublisher = myId < publisherCount
-      # [0..<publisherCount] contains all the publishers
-    isMix = isPublisher # Publishers will be the mix nodes for now
+    isMix = true # All nodes run Mix
     myport = parseInt(getEnv("PORT", "5000"))
     switch = createSwitch(myId, myport, isMix, filePath)
 
@@ -214,13 +189,13 @@ proc main() {.async.} =
 
     gossipSub = GossipSub.init(
       switch = switch,
-      triggerSelf = true,
+      triggerSelf = false,
       msgIdProvider = msgIdProvider,
       verifySignature = false,
       anonymize = true,
       customConnCallbacks = some(
         CustomConnectionCallbacks(
-          customConnCreationCB: mixConn, peerSelectionCB: mixPeerSelect
+          customConnCreationCB: mixConn, customPeerSelectionCB: mixPeerSelect
         )
       ),
     )
@@ -258,17 +233,21 @@ proc main() {.async.} =
   )
 
   proc messageHandler(topic: string, data: seq[byte]) {.async.} =
-    let sentUint = uint64.fromBytesLE(data)
-    # warm-up
-    if sentUint < 1000000:
+    if data.len < 16:
+      warn "Message too short"
       return
 
     let
-      sentMoment = nanoseconds(int64(uint64.fromBytesLE(data)))
+      timestampNs = uint64.fromBytesLE(data[0 ..< 8])
+      msgId = uint64.fromBytesLE(data[8 ..< 16])
+      sentMoment = nanoseconds(int64(timestampNs))
       sentNanosecs = nanoseconds(sentMoment - seconds(sentMoment.seconds))
       sentDate = initTime(sentMoment.seconds, sentNanosecs)
-      diff = getTime() - sentDate
-    info "Sent", msgId = sentUint, milliSec = diff.inMilliseconds()
+      recvTime = getTime()
+      delay = recvTime - sentDate
+
+    info "Moment now", moment=Moment.now()
+    info "Received message", msgId = msgId, sentAt = timestampNs, current = recvTime.toUnix().int64 * 1_000_000_000 + times.nanosecond(recvTime).int64, delayMs = delay.inMilliseconds()
 
   proc messageValidator(
       topic: string, msg: Message
@@ -280,6 +259,7 @@ proc main() {.async.} =
   switch.mount(gossipSub)
   await switch.start()
 
+  info "PeerId ", peerid = switch.peerInfo.peerId
   info "Listening", addrs = switch.peerInfo.addrs
 
   info "Waiting 20 seconds for node building..."
@@ -324,14 +304,29 @@ proc main() {.async.} =
   info "Mesh size", meshSize = gossipSub.mesh.getOrDefault("test").len
 
   info "Publishing turn", id = myId
-  for msg in 0 ..< 10000: #client.param(int, "message_count"):
+  for msg in 0 ..< messages: #client.param(int, "message_count"):
     await sleepAsync(msg_rate)
     if msg mod publisherCount == myId:
-      info "Sending message", time = times.getTime()
-      let
-        now = getTime()
-        nowInt = seconds(now.toUnix()) + nanoseconds(times.nanosecond(now))
-      var nowBytes = @(toBytesLE(uint64(nowInt.nanoseconds))) & newSeq[byte](msg_size)
-      doAssert((await gossipSub.publish("test", nowBytes, useCustomConn = true)) > 0)
+      let now = getTime()
+      let timestampNs = now.toUnix().int64 * 1_000_000_000 + times.nanosecond(now).int64
+      let msgId = uint64(msg)
+
+      var payload: seq[byte]
+      payload.add(toBytesLE(uint64(timestampNs)))
+      payload.add(toBytesLE(msgId))
+      payload.add(newSeq[byte](msg_size - 16)) # Fill the rest with padding
+
+      info "Publishing message", msgId = msgId, timestamp = timestampNs
+
+      doAssert(
+        (
+          await gossipSub.publish(
+            "test",
+            payload,
+            publishParams = some(PublishParams(skipMCache: true, useCustomConn: true)),
+          )
+        ) > 0
+      )
+  await sleepAsync(999999999)
 
 waitFor(main())

@@ -29,7 +29,7 @@ WORKDIR /node
 # Copy nim
 COPY --from=build_nim /nim /nim
 
-ENV PATH="/nim/bin:${PATH}"
+ENV PATH="/root/.nimble/bin:/nim/bin:${PATH}"
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -38,12 +38,18 @@ RUN apt-get update && apt install -y git build-essential bash ca-certificates li
 # Configure git and install dependencies
 RUN git config --global http.sslVerify false
 
-# Copy source code
+# Install latest nimble version
+RUN nimble install nimble@#head
+
+# Copy only files needed to install Nimble deps (optimizes layer caching)
+COPY test_node.nimble .
+RUN nimble install -y --depsOnly.
+
+# Copy full source AFTER deps are cached
 COPY . .
 
-RUN nimble install
-
 # Compile the Nim application
+# -d:chronicles_log_level:TRACE
 RUN nimble c -d:chronicles_colors=None --threads:on -d:metrics -d:libp2p_network_protocols_metrics  -d:release main
 
 # =============================================================================
