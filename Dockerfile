@@ -49,6 +49,7 @@ RUN nimble install -y --depsOnly.
 COPY . .
 
 # Compile the Nim application
+# -d:chronicles_log_level:TRACE
 RUN nimble c -d:chronicles_colors=None --threads:on -d:metrics -d:libp2p_network_protocols_metrics  -d:release main
 
 # =============================================================================

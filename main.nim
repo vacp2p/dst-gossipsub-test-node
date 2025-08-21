@@ -189,7 +189,7 @@ proc main() {.async.} =
 
     gossipSub = GossipSub.init(
       switch = switch,
-      triggerSelf = true,
+      triggerSelf = false,
       msgIdProvider = msgIdProvider,
       verifySignature = false,
       anonymize = true,
@@ -246,8 +246,8 @@ proc main() {.async.} =
       recvTime = getTime()
       delay = recvTime - sentDate
 
-    info "Received message",
-      msgId = msgId, sentAt = timestampNs, delayMs = delay.inMilliseconds()
+    info "Moment now", moment=Moment.now()
+    info "Received message", msgId = msgId, sentAt = timestampNs, current = recvTime.toUnix().int64 * 1_000_000_000 + times.nanosecond(recvTime).int64, delayMs = delay.inMilliseconds()
 
   proc messageValidator(
       topic: string, msg: Message
