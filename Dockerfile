@@ -39,18 +39,18 @@ RUN apt-get update && apt install -y git build-essential bash ca-certificates li
 RUN git config --global http.sslVerify false
 
 # Install latest nimble version
-RUN nimble install nimble@#head
+RUN nimble install nimble@0.20.1
 
 # Copy only files needed to install Nimble deps (optimizes layer caching)
 COPY test_node.nimble .
+
 RUN nimble install -y --depsOnly.
 
 # Copy full source AFTER deps are cached
 COPY . .
 
 # Compile the Nim application
-# -d:chronicles_log_level:TRACE
-RUN nimble c -d:chronicles_colors=None --threads:on -d:metrics -d:libp2p_network_protocols_metrics  -d:release main
+RUN nimble c -d:chronicles_colors=None --threads:on -d:metrics -d:libp2p_network_protocols_metrics -d:enable_mix_benchmarks  -d:release main
 
 # =============================================================================
 # Run the app
@@ -66,7 +66,7 @@ WORKDIR /node
 # Copy the compiled binary from the build stage
 COPY --from=build_app /node/main /node/main
 
-COPY cron_runner.sh .
+COPY ./cron_runner.sh .
 
 RUN chmod +x cron_runner.sh
 RUN chmod +x main
