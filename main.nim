@@ -67,13 +67,30 @@ proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
       warn "Failed to set up node", nodeId = id
       return
 
+    var externalAddr: string = ""
     let addresses = getInterfaces().filterIt(it.name == "eth0").mapIt(it.addresses)
     if addresses.len < 1 or addresses[0].len < 1:
-      error "Can't find local ip!"
+      echo "Can't find local ip!, trying alternate method"
+
+      if fileExists("/etc/hosts"):
+        let
+          content = readFile("/etc/hosts")
+          hostname = gethostname()
+        for line in content.splitLines():
+          if line.contains(hostname) and not line.startsWith("#"):
+            let
+              parts = line.strip().split()
+              ip = parts[0]
+            if not (ip.startsWith("127") or ip.contains("::1")):
+                externalAddr = ip
+                break
+    else:        
+      externalAddr = ($addresses[0][0].host).split(":")[0]
+    
+    if externalAddr == "":
       return
 
     let
-      externalAddr = ($addresses[0][0].host).split(":")[0]
       peerId = switch.peerInfo.peerId
       externalMultiAddr = fmt"/ip4/{externalAddr}/tcp/{port}/p2p/{peerId}"
 
@@ -132,15 +149,15 @@ proc main() {.async.} =
 
   let
     hostname = getHostname()
-    node_count = parseInt(getEnv("NODES"))
-    messages = parseInt(getEnv("MESSAGES"))
+    node_count = parseInt(getEnv("PEERS"))
+    messages = parseInt(getEnv("PUBLISHERS"))
     msg_rate = parseInt(getEnv("MSGRATE"))
     msg_size = parseInt(getEnv("MSGSIZE"))
-    publisherCount = parseInt(getEnv("PUBLISHERS"))
+    publisherCount = messages #parseInt(getEnv("PUBLISHERS"))
     mixCount = node_count
       # Ensures all nodes run Mix so that any GossipSub peer can act as an exit node
     connectTo = parseInt(getEnv("CONNECTTO"))
-    filePath = getEnv("FILEPATH", "./")
+    filePath = getEnv("FILEPATH", "../")
     rng = libp2p.newRng()
 
   if publisherCount > node_count:
@@ -148,7 +165,7 @@ proc main() {.async.} =
     return
 
   info "Hostname", host = hostname
-  let myId = getHostname().split('-')[^1].parseInt()
+  let myId = parseInt(hostname[4..^1]) - 1 #getHostname().split('-')[^1].parseInt()
   info "ID", id = myId
 
   let
