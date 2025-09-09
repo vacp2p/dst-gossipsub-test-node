@@ -50,7 +50,7 @@ RUN nimble install -y --depsOnly.
 COPY . .
 
 # Compile the Nim application
-RUN nimble c -d:chronicles_colors=None --threads:on -d:metrics -d:libp2p_network_protocols_metrics -d:enable_mix_benchmarks  -d:release main
+RUN nimble c -d:chronicles_colors=None --threads:on -d:metrics -d:libp2p_network_protocols_metrics -d:enable_mix_benchmarks  -d:release main --verbose --debug
 
 # =============================================================================
 # Run the app

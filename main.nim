@@ -3,7 +3,7 @@ import metrics, metrics/chronos_httpserver
 import stew/[byteutils, endians2]
 import
   std/[
-    strformat, random, posix, hashes, math, sequtils, strutils, tables, os,
+    strformat, random, hashes, sequtils, strutils, tables, os,
     nativesockets,
   ]
 import mix
@@ -170,7 +170,8 @@ proc main() {.async.} =
     msg_rate = parseInt(getEnv("MSGRATE"))
     msg_size = parseInt(getEnv("MSGSIZE"))
     publisherCount = parseInt(getEnv("PUBLISHERS"))
-    mixCount = node_count
+    isMix = parseBool(getEnv("ISMIX"))
+    mixCount = parseInt(getEnv("NUMMIX"))
       # Ensures all nodes run Mix so that any GossipSub peer can act as an exit node
     connectTo = parseInt(getEnv("CONNECTTO"))
     filePath = getEnv("FILEPATH", "./")
@@ -181,14 +182,18 @@ proc main() {.async.} =
     return
 
   info "Hostname", host = hostname
-  let myId = getHostname().split('-')[^1].parseInt()
+  # let myId = getHostname().split('-')[^1].parseInt()
+  let myId = getHostname().split('-')[^1].parseInt() + (if not isMix: mixCount else: 0)
+
   info "ID", id = myId
 
   let
     isPublisher = myId < publisherCount
-    isMix = true # All nodes run Mix
+    triggerSelf = parseBool(getEnv("SELFTRIGGER"))
     myport = parseInt(getEnv("PORT", "5000"))
     switch = createSwitch(myId, myport, isMix, filePath)
+
+  info "params", triggerSelf = triggerSelf, isMix = isMix, hostname = hostname, publisherCount = publisherCount
 
   await sleepAsync(10.seconds)
 
@@ -215,7 +220,7 @@ proc main() {.async.} =
 
     gossipSub = GossipSub.init(
       switch = switch,
-      triggerSelf = false,
+      triggerSelf = triggerSelf,
       msgIdProvider = msgIdProvider,
       verifySignature = false,
       anonymize = true,
@@ -230,7 +235,7 @@ proc main() {.async.} =
   else:
     gossipSub = GossipSub.init(
       switch = switch,
-      triggerSelf = true,
+      triggerSelf = triggerSelf,
       msgIdProvider = msgIdProvider,
       verifySignature = false,
       anonymize = true,
