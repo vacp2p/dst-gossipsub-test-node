@@ -44,36 +44,39 @@ RUN nimble install nimble@0.20.1
 # Copy only files needed to install Nimble deps (optimizes layer caching)
 COPY test_node.nimble .
 
-RUN nimble install -y --depsOnly.
+# # RUN nimble install https://github.com/vacp2p/nim-libp2p#a923e204472dcc911ecf48bdcb6a00b3bee3386f
+# # RUN nimble install https://github.com/vacp2p/mix#e45cd05bfdb775a4cb2c9443077a15b9da13c037
+# RUN nimble install -y --depsOnly.
 
-# Copy full source AFTER deps are cached
-COPY . .
+# # Copy full source AFTER deps are cached
+# COPY . .
 
-# Compile the Nim application
-RUN nimble c -d:chronicles_colors=None --threads:on -d:metrics -d:libp2p_network_protocols_metrics -d:enable_mix_benchmarks  -d:release main --verbose --debug
+# # Compile the Nim application
+# # RUN nimble c -d:chronicles_colors=None --threads:on -d:metrics -d:libp2p_network_protocols_metrics -d:enable_mix_benchmarks  -d:release main --verbose --debug
+# RUN nimble compile -d:chronicles_colors=None --threads:on -d:metrics -d:libp2p_network_protocols_metrics -d:enable_mix_benchmarks -d:release main --verbose
 
-# =============================================================================
-# Run the app
-FROM debian:bookworm AS prod
+# # =============================================================================
+# # Run the app
+# FROM debian:bookworm AS prod
 
-ENV DEBIAN_FRONTEND=noninteractive
+# ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt update && apt -y install cron libpcre3 libssl-dev
+# RUN apt update && apt -y install cron libpcre3 libssl-dev
 
-# Set the working directory
-WORKDIR /node
+# # Set the working directory
+# WORKDIR /node
 
-# Copy the compiled binary from the build stage
-COPY --from=build_app /node/main /node/main
+# # Copy the compiled binary from the build stage
+# COPY --from=build_app /node/main /node/main
 
-COPY ./cron_runner.sh .
+# COPY ./cron_runner.sh .
 
-RUN chmod +x cron_runner.sh
-RUN chmod +x main
+# RUN chmod +x cron_runner.sh
+# RUN chmod +x main
 
-EXPOSE 5000 8008
+# EXPOSE 5000 8008
 
-ENV FILEPATH=/data
-VOLUME ["/data"]
+# ENV FILEPATH=/data
+# VOLUME ["/data"]
 
-ENTRYPOINT ["./cron_runner.sh"]
+# ENTRYPOINT ["./cron_runner.sh"]
