@@ -44,39 +44,42 @@ RUN nimble install nimble@0.20.1
 # Copy only files needed to install Nimble deps (optimizes layer caching)
 COPY test_node.nimble .
 
-# # RUN nimble install https://github.com/vacp2p/nim-libp2p#a923e204472dcc911ecf48bdcb6a00b3bee3386f
-# # RUN nimble install https://github.com/vacp2p/mix#e45cd05bfdb775a4cb2c9443077a15b9da13c037
-# RUN nimble install -y --depsOnly.
+RUN apt install -y mercurial
 
-# # Copy full source AFTER deps are cached
-# COPY . .
+RUN nimble install https://github.com/vacp2p/nim-libp2p@#a923e204472dcc911ecf48bdcb6a00b3bee3386f
+RUN nimble install https://github.com/vacp2p/mix@#e45cd05bfdb775a4cb2c9443077a15b9da13c037
 
-# # Compile the Nim application
-# # RUN nimble c -d:chronicles_colors=None --threads:on -d:metrics -d:libp2p_network_protocols_metrics -d:enable_mix_benchmarks  -d:release main --verbose --debug
-# RUN nimble compile -d:chronicles_colors=None --threads:on -d:metrics -d:libp2p_network_protocols_metrics -d:enable_mix_benchmarks -d:release main --verbose
+RUN nimble install -y --depsOnly.
 
-# # =============================================================================
-# # Run the app
-# FROM debian:bookworm AS prod
+# Copy full source AFTER deps are cached
+COPY . .
 
-# ENV DEBIAN_FRONTEND=noninteractive
+# Compile the Nim application
+# RUN nimble c -d:chronicles_colors=None --threads:on -d:metrics -d:libp2p_network_protocols_metrics -d:enable_mix_benchmarks  -d:release main --verbose --debug
+RUN nimble compile -d:chronicles_colors=None --threads:on -d:metrics -d:libp2p_network_protocols_metrics -d:enable_mix_benchmarks -d:release main --verbose
 
-# RUN apt update && apt -y install cron libpcre3 libssl-dev
+# =============================================================================
+# Run the app
+FROM debian:bookworm AS prod
 
-# # Set the working directory
-# WORKDIR /node
+ENV DEBIAN_FRONTEND=noninteractive
 
-# # Copy the compiled binary from the build stage
-# COPY --from=build_app /node/main /node/main
+RUN apt update && apt -y install cron libpcre3 libssl-dev
 
-# COPY ./cron_runner.sh .
+# Set the working directory
+WORKDIR /node
 
-# RUN chmod +x cron_runner.sh
-# RUN chmod +x main
+# Copy the compiled binary from the build stage
+COPY --from=build_app /node/main /node/main
 
-# EXPOSE 5000 8008
+COPY ./cron_runner.sh .
 
-# ENV FILEPATH=/data
-# VOLUME ["/data"]
+RUN chmod +x cron_runner.sh
+RUN chmod +x main
 
-# ENTRYPOINT ["./cron_runner.sh"]
+EXPOSE 5000 8008
+
+ENV FILEPATH=/data
+VOLUME ["/data"]
+
+ENTRYPOINT ["./cron_runner.sh"]
