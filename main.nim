@@ -359,6 +359,7 @@ proc main() {.async.} =
           )
         ) > 0
       )
+  info "Out of for loop"
   await sleepAsync(10.days)
 
 waitFor(main())
