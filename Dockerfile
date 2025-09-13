@@ -56,7 +56,8 @@ COPY . .
 
 # Compile the Nim application
 # RUN nimble c -d:chronicles_colors=None --threads:on -d:metrics -d:libp2p_network_protocols_metrics -d:enable_mix_benchmarks  -d:release main --verbose --debug
-RUN nimble compile -d:chronicles_colors=None --threads:on -d:metrics -d:libp2p_network_protocols_metrics -d:enable_mix_benchmarks -d:release main --verbose
+# RUN nimble compile -d:chronicles_colors=None --threads:on -d:metrics -d:libp2p_network_protocols_metrics -d:enable_mix_benchmarks -d:release main --verbose
+RUN nimble compile -d:chronicles_colors=None --threads:on -d:metrics -d:libp2p_network_protocols_metrics -d:enable_mix_benchmarks -d:release main --verbose --debuginfo
 
 # =============================================================================
 # Run the app

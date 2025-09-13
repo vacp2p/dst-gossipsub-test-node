@@ -311,6 +311,7 @@ proc main() {.async.} =
       )
     let (multiAddr, _) = getPubInfo(pubInfo)
     let ma = MultiAddress.init(multiAddr).expect("should be a multiaddr")
+    info "Add", ma = ma
     addrs.add ma
 
   rng.shuffle(addrs)
@@ -320,7 +321,7 @@ proc main() {.async.} =
       break
     while true:
       try:
-        info "Trying to connect", addrs = addrs[index]
+        info "Trying to connect", index = index, addrs = addrs[index]
         let peerId =
           await switch.connect(addrs[index], allowUnknownPeerId = true).wait(5.seconds)
         connected.inc()
