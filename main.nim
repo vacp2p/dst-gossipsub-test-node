@@ -346,8 +346,16 @@ proc main() {.async.} =
 
       var payload: seq[byte]
       payload.add(toBytesLE(timestampNs.uint64))
+
+      info "Publish LE", le = toBytesLE(timestampNs.uint64)
+      info "Publish uint", ui = timestampNs.uint64
+      info "Publish timestamp", ts = timestampNs
+
       payload.add(toBytesLE(msgId))
+      info "Publish msgId", id = msgId
       payload.add(newSeq[byte](msg_size - 16)) # Fill the rest with padding
+
+      info "Publish payload", bytes = payload
 
       info "Publishing message", msgId = msgId, timestamp = timestampNs
 
