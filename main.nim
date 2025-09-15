@@ -21,6 +21,10 @@ import
   ]
 from times import getTime, toUnixFloat, `-`, initTime, `$`, inMilliseconds, Time
 
+let utcTime = times.getTime()
+let timestampNs = Moment.now().epochNanoSeconds()
+info "after imports main", timestampNs = timestampNs, utcTime = utcTime
+
 # const D* = 4 # No. of peers to forward to
 const D* = 1 # No. of peers to forward to
 
@@ -376,5 +380,9 @@ proc main() {.async.} =
       )
   info "Out of for loop"
   await sleepAsync(10.days)
+  info "end of main"
 
+let utcTime2 = times.getTime()
+let timestampNs2 = Moment.now().epochNanoSeconds()
+info "before main start", timestampNs2 = timestampNs2, utcTime2 = utcTime2
 waitFor(main())
