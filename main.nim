@@ -1,4 +1,5 @@
 import chronos, chronicles, results
+from times import nil
 import metrics, metrics/chronos_httpserver
 import stew/[byteutils, endians2]
 import
@@ -20,7 +21,8 @@ import
   ]
 from times import getTime, toUnixFloat, `-`, initTime, `$`, inMilliseconds, Time
 
-const D* = 4 # No. of peers to forward to
+# const D* = 4 # No. of peers to forward to
+const D* = 1 # No. of peers to forward to
 
 template toUnixNanoseconds(t: times.Time): int64 =
   (t.toUnixFloat() * 1_000_000_000).int64
@@ -161,6 +163,10 @@ proc makeMixConnCb(mixProto: MixProtocol): CustomConnCreationProc =
       return nil
 
 proc main() {.async.} =
+  let utcTime = times.getTime()
+  let timestampNs = Moment.now().epochNanoSeconds()
+  info "main start", timestampNs = timestampNs, utcTime = utcTime
+
   randomize()
 
   let
