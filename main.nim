@@ -34,6 +34,12 @@ template toUnixNanoseconds(t: times.Time): int64 =
 template fromUnixNanoseconds(ns: int64): times.Time =
   initTime(ns div 1_000_000_000, ns mod 1_000_000_000)
 
+template toUnixNanoseconds(t: times.Time): int64 =
+  (t.toUnixFloat() * 1_000_000_000).int64
+
+template fromUnixNanoseconds(ns: int64): times.Time =
+  initTime(ns div 1_000_000_000, ns mod 1_000_000_000)
+
 proc mixPeerSelection*(
     allPeers: HashSet[PubSubPeer],
     directPeers: HashSet[PubSubPeer],
