@@ -18,8 +18,15 @@ import
     protocols/pubsub/pubsubpeer,
     protocols/pubsub/rpc/messages,
   ]
+from times import getTime, toUnixFloat, `-`, initTime, `$`, inMilliseconds, Time
 
 const D* = 4 # No. of peers to forward to
+
+template toUnixNanoseconds(t: times.Time): int64 =
+  (t.toUnixFloat() * 1_000_000_000).int64
+
+template fromUnixNanoseconds(ns: int64): times.Time =
+  initTime(ns div 1_000_000_000, ns mod 1_000_000_000)
 
 proc mixPeerSelection*(
     allPeers: HashSet[PubSubPeer],
@@ -257,14 +264,18 @@ proc main() {.async.} =
       return
 
     let
-      timestampNs = uint64.fromBytesLE(data[0 ..< 8])
+      timestampNs = uint64.fromBytesLE(data[0 ..< 8]).int64
+      sendTime = fromUnixNanoseconds(timestampNs)
       msgId = uint64.fromBytesLE(data[8 ..< 16])
-      sentTime = Moment.init(int64(timestampNs), Nanosecond)
-      recvTime = Moment.now()
-      delay = recvTime - sentTime
+      recvTime = getTime()
+      delay = recvTime - sendTime
 
+    info "Moment now", moment = Moment.now()
     info "Received message",
-      msgId = msgId, sentAt = timestampNs, current = recvTime.epochNanoSeconds(), delayMs = delay.milliseconds()
+      msgId = msgId,
+      sentAt = timestampNs,
+      current = recvTime.toUnixNanoseconds(),
+      delayMs = delay.inMilliseconds()
 
   proc messageValidator(
       topic: string, msg: Message
@@ -324,7 +335,7 @@ proc main() {.async.} =
   for msg in 0 ..< messages: #client.param(int, "message_count"):
     await sleepAsync(msg_rate.milliseconds)
     if msg mod publisherCount == myId:
-      let timestampNs = Moment.now().epochNanoSeconds()
+      let timestampNs = getTime().toUnixNanoseconds()
       let msgId = uint64(msg)
 
       var payload: seq[byte]
