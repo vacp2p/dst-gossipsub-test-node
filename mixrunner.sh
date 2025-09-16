@@ -1,3 +1,4 @@
+
 #!/bin/bash
 
 N="$1"
@@ -15,7 +16,7 @@ if [[ "$(ls -A "$DATADIR")" ]]; then
 fi
 
 for i in $(seq 0 $((N-1))); do
-  docker run --rm \
+  docker run \
     -d \
     --name node-$i \
     --hostname node-$i \

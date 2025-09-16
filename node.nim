@@ -119,7 +119,7 @@ proc readPubInfoFromFile*(
     let data = file.readAll()
     if data.len != PubInfoSize:
       return err(
-        "Invalid data size for NodeInfo: expected " & $NodeInfoSize & " bytes, but got " &
+        "Invalid data size for PubInfo: expected " & $PubInfoSize & " bytes, but got " &
           $(data.len) & " bytes."
       )
     let dPubInfo = deserializePubInfo(cast[seq[byte]](data)).valueOr:
@@ -152,11 +152,9 @@ proc generateNodes(count: int, basePort: int = 4242): Result[seq[NodeInfo], stri
       pubKeyProto = PublicKey(scheme: Secp256k1, skkey: libp2pPubKey)
       peerId = PeerId.init(pubKeyProto).get()
       multiAddr = fmt"/ip4/0.0.0.0/tcp/{basePort + i}/p2p/{peerId}"
-
     nodes[i] = NodeInfo(
       multiAddr: multiAddr, libp2pPubKey: libp2pPubKey, libp2pPrivKey: libp2pPrivKey
     )
-
   ok(nodes)
 
 proc initializeNodes*(count: int, basePort: int = 4242): Result[void, string] =

@@ -1,33 +1,49 @@
-import chronos, chronicles, hashes, math, sequtils, strutils, tables, os
-import nimcrypto/sysrand
+import chronos, chronicles, results
 import metrics, metrics/chronos_httpserver
 import stew/[byteutils, endians2]
 import
   std/[
-    enumerate, options, strformat, sysrand, os, sequtils, dirs, parseutils, random,
-    posix, algorithm,
+    strformat, random, posix, hashes, math, sequtils, strutils, tables, os,
+    nativesockets,
   ]
-import node
-import json
-import
-  mix/[
-    entry_connection, entry_connection_callbacks, mix_node, mix_protocol, protocol,
-    utils,
-  ]
+import mix
+import ./node
 import
   libp2p,
   libp2p/[
     crypto/secp,
     multiaddress,
     builders,
-    muxers/yamux/yamux,
     protocols/pubsub/gossipsub,
     protocols/pubsub/pubsubpeer,
     protocols/pubsub/rpc/messages,
-    transports/tcptransport,
   ]
-from times import getTime, toUnix, fromUnix, `-`, initTime, `$`, inMilliseconds
-from nativesockets import getHostname
+from times import getTime, toUnixFloat, `-`, initTime, `$`, inMilliseconds, Time
+
+const D* = 4 # No. of peers to forward to
+
+template toUnixNanoseconds(t: times.Time): int64 =
+  (t.toUnixFloat() * 1_000_000_000).int64
+
+template fromUnixNanoseconds(ns: int64): times.Time =
+  initTime(ns div 1_000_000_000, ns mod 1_000_000_000)
+
+proc mixPeerSelection*(
+    allPeers: HashSet[PubSubPeer],
+    directPeers: HashSet[PubSubPeer],
+    meshPeers: HashSet[PubSubPeer],
+    fanoutPeers: HashSet[PubSubPeer],
+): HashSet[PubSubPeer] {.gcsafe, raises: [].} =
+  var
+    peers: HashSet[PubSubPeer]
+    allPeersSeq = allPeers.toSeq()
+  let rng = newRng()
+  rng.shuffle(allPeersSeq)
+  for p in allPeersSeq:
+    peers.incl(p)
+    if peers.len >= D:
+      break
+  return peers
 
 proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
   {.gcsafe.}:
@@ -36,8 +52,12 @@ proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
       libp2pPubKey: SkPublicKey
       libp2pPrivKey: SkPrivateKey
 
+    var mixNodes: MixNodes = @[]
+
     if isMix:
-      discard initializeMixNodes(1, port)
+      mixNodes = initializeMixNodes(1, port).valueOr:
+        error "Could not generate mix nodes"
+        return
 
       let mixNodeInfo = getMixNodeInfo(mixNodes[0])
       multiAddrStr = mixNodeInfo[0]
@@ -78,14 +98,17 @@ proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
       externalMultiAddr = fmt"/ip4/{externalAddr}/tcp/{port}/p2p/{peerId}"
 
     if isMix:
-      discard initMixMultiAddrByIndex(0, externalMultiAddr)
+      let initRes = mixNodes.initMixMultiAddrByIndex(0, externalMultiAddr)
+      if initRes.isErr:
+        error "Failed to initialize mix node", id = 0, err = initRes.error
+        return
       let writeNodeRes =
         writeMixNodeInfoToFile(mixNodes[0], id, filePath / fmt"nodeInfo")
       if writeNodeRes.isErr:
         error "Failed to write mix info to file", nodeId = id, err = writeNodeRes.error
         return
 
-      let nodePubInfo = getMixPubInfoByIndex(0).valueOr:
+      let nodePubInfo = mixNodes.getMixPubInfoByIndex(0).valueOr:
         error "Get mix pub info by index error", err = error
         return
 
@@ -112,20 +135,30 @@ proc startMetricsServer(
 ): Result[MetricsHttpServerRef, string] =
   info "Starting metrics HTTP server", serverIp = $serverIp, serverPort = $serverPort
 
-  let metricsServerRes = MetricsHttpServerRef.new($serverIp, serverPort)
-  if metricsServerRes.isErr():
-    return err("metrics HTTP server start failed: " & $metricsServerRes.error)
+  let server = MetricsHttpServerRef.new($serverIp, serverPort).valueOr:
+    return err("metrics HTTP server start failed: " & $error)
 
-  let server = metricsServerRes.value
   try:
     waitFor server.start()
   except CatchableError:
     return err("metrics HTTP server start failed: " & getCurrentExceptionMsg())
 
   info "Metrics HTTP server started", serverIp = $serverIp, serverPort = $serverPort
-  ok(metricsServerRes.value)
 
-const uidLen = 32
+  ok(server)
+
+proc makeMixConnCb(mixProto: MixProtocol): CustomConnCreationProc =
+  return proc(
+      destAddr: Option[MultiAddress], destPeerId: PeerId, codec: string
+  ): Connection {.gcsafe, raises: [].} =
+    try:
+      let dest = destAddr.valueOr:
+        debug "No destination address available"
+        return
+      return mixProto.toConnection(MixDestination.init(destPeerId, dest), codec).get()
+    except CatchableError as e:
+      error "Error during execution of MixEntryConnection callback: ", err = e.msg
+      return nil
 
 proc main() {.async.} =
   randomize()
@@ -166,14 +199,7 @@ proc main() {.async.} =
         "could not instantiate mix"
       )
 
-    let mixConn = proc(
-        destAddr: Option[MultiAddress], destPeerId: PeerId, codec: string
-    ): Connection {.gcsafe, raises: [].} =
-      try:
-        return mixProto.createMixEntryConnection(destAddr, destPeerId, codec)
-      except CatchableError as e:
-        error "Error during execution of MixEntryConnection callback", err = e.msg
-        return nil
+    let mixConn = makeMixConnCb(mixProto)
 
     let mixPeerSelect = proc(
         allPeers: HashSet[PubSubPeer],
@@ -184,7 +210,7 @@ proc main() {.async.} =
       try:
         return mixPeerSelection(allPeers, directPeers, meshPeers, fanoutPeers)
       except CatchableError as e:
-        error "Error during execution of MixPeerSelection callback", err = e.msg
+        error "Error during execution of MixPeerSelection callback: ", err = e.msg
         return initHashSet[PubSubPeer]()
 
     gossipSub = GossipSub.init(
@@ -238,16 +264,18 @@ proc main() {.async.} =
       return
 
     let
-      timestampNs = uint64.fromBytesLE(data[0 ..< 8])
+      timestampNs = uint64.fromBytesLE(data[0 ..< 8]).int64
+      sendTime = fromUnixNanoseconds(timestampNs)
       msgId = uint64.fromBytesLE(data[8 ..< 16])
-      sentMoment = nanoseconds(int64(timestampNs))
-      sentNanosecs = nanoseconds(sentMoment - seconds(sentMoment.seconds))
-      sentDate = initTime(sentMoment.seconds, sentNanosecs)
       recvTime = getTime()
-      delay = recvTime - sentDate
+      delay = recvTime - sendTime
 
-    info "Moment now", moment=Moment.now()
-    info "Received message", msgId = msgId, sentAt = timestampNs, current = recvTime.toUnix().int64 * 1_000_000_000 + times.nanosecond(recvTime).int64, delayMs = delay.inMilliseconds()
+    info "Moment now", moment = Moment.now()
+    info "Received message",
+      msgId = msgId,
+      sentAt = timestampNs,
+      current = recvTime.toUnixNanoseconds(),
+      delayMs = delay.inMilliseconds()
 
   proc messageValidator(
       topic: string, msg: Message
@@ -305,14 +333,13 @@ proc main() {.async.} =
 
   info "Publishing turn", id = myId
   for msg in 0 ..< messages: #client.param(int, "message_count"):
-    await sleepAsync(msg_rate)
+    await sleepAsync(msg_rate.milliseconds)
     if msg mod publisherCount == myId:
-      let now = getTime()
-      let timestampNs = now.toUnix().int64 * 1_000_000_000 + times.nanosecond(now).int64
+      let timestampNs = getTime().toUnixNanoseconds()
       let msgId = uint64(msg)
 
       var payload: seq[byte]
-      payload.add(toBytesLE(uint64(timestampNs)))
+      payload.add(toBytesLE(timestampNs.uint64))
       payload.add(toBytesLE(msgId))
       payload.add(newSeq[byte](msg_size - 16)) # Fill the rest with padding
 
@@ -327,6 +354,6 @@ proc main() {.async.} =
           )
         ) > 0
       )
-  await sleepAsync(999999999)
+  await sleepAsync(10.days)
 
 waitFor(main())
