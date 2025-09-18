@@ -17,6 +17,7 @@ requires "nim >= 2.0.8",
 
 
   "https://github.com/vacp2p/nim-libp2p#a923e204472dcc911ecf48bdcb6a00b3bee3386f",
-  "https://github.com/vacp2p/mix#80a97d3f6c2cfbd1be9085ca019cd5626ea05045", # main
+  # "https://github.com/vacp2p/mix#80a97d3f6c2cfbd1be9085ca019cd5626ea05045", # main
+  "https://github.com/vacp2p/mix#b589c0686ebbe3d4d8be0a3a4b35762c30b09cff", # main w/ logging
 
   "chronos", "ggplotnim"

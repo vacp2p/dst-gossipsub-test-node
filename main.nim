@@ -371,7 +371,7 @@ proc main() {.async.} =
           await gossipSub.publish(
             "test",
             payload,
-            publishParams = some(PublishParams(skipMCache: true, useCustomConn: true)),
+            publishParams = some(PublishParams(skipMCache: true, useCustomConn: isMix)),
           )
         ) > 0
       )
