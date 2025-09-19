@@ -18,6 +18,6 @@ requires "nim >= 2.0.8",
 
   "https://github.com/vacp2p/nim-libp2p#a923e204472dcc911ecf48bdcb6a00b3bee3386f",
   # "https://github.com/vacp2p/mix#80a97d3f6c2cfbd1be9085ca019cd5626ea05045", # main
-  "https://github.com/vacp2p/mix#540f67c52fe87ce96653e85c92d66da0a237c79c",
+  "https://github.com/vacp2p/mix#778e77dbf97dab1f2c388e6bce3d586d7683a230",
 
   "chronos", "ggplotnim"

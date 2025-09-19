@@ -47,7 +47,7 @@ COPY test_node.nimble .
 RUN apt install -y mercurial
 
 RUN nimble install https://github.com/vacp2p/nim-libp2p@#a923e204472dcc911ecf48bdcb6a00b3bee3386f
-RUN nimble install https://github.com/vacp2p/mix@#540f67c52fe87ce96653e85c92d66da0a237c79c
+RUN nimble install https://github.com/vacp2p/mix@#778e77dbf97dab1f2c388e6bce3d586d7683a230
 
 RUN nimble install -y --depsOnly.
 
