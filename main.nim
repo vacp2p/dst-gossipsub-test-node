@@ -87,6 +87,7 @@ proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
       .withAddress(multiAddr)
       .withRng(crypto.newRng())
       .withYamux()
+      .withMaxConnections(250)
       .withTcpTransport()
       .withNoise()
       .build()
