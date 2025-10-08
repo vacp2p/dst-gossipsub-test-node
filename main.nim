@@ -81,13 +81,16 @@ proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
       error "Failed to initialize MultiAddress", err = error
       return
 
+    let max_connections = parseInt(getEnv("MAXCONNECTIONS", "250"))
+    info "Setting up SwitchBuilder", max_connections = max_connections
+
     let switch = SwitchBuilder
       .new()
       .withPrivateKey(PrivateKey(scheme: Secp256k1, skkey: libp2pPrivKey))
       .withAddress(multiAddr)
       .withRng(crypto.newRng())
       .withYamux()
-      .withMaxConnections(250)
+      .withMaxConnections(max_connections)
       .withTcpTransport()
       .withNoise()
       .build()
